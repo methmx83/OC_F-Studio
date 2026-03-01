@@ -705,6 +705,9 @@ function findNearestWorkflowsRoot(startDir: string): string | null {
 
 function resolveGlobalWorkflowsRoot(): string {
   const directCandidates = [
+    // Robust for electron-vite dev build output (apps/desktop/out/main -> repo/workflows)
+    path.resolve(__dirname, '../../../../workflows'),
+    // Additional fallbacks for different runtime layouts
     path.resolve(app.getAppPath(), '../../workflows'),
     path.resolve(app.getAppPath(), '../workflows'),
     path.resolve(app.getAppPath(), 'workflows'),
