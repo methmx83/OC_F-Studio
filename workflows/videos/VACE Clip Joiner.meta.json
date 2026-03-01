@@ -6,8 +6,8 @@
   "inputs": [
     {
       "key": "pathAssetId",
-      "type": "Path",
-      "label": "Input Path",
+      "type": "video",
+      "label": "Input Video",
       "required": true
     }
   ],
