@@ -684,16 +684,43 @@ const comfyService = createComfyService({
   emitRunEvent: emitComfyRunEvent,
 });
 
+function findNearestWorkflowsRoot(startDir: string): string | null {
+  let current = path.resolve(startDir);
+
+  while (true) {
+    const candidate = path.join(current, 'workflows');
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+
+  return null;
+}
+
 function resolveGlobalWorkflowsRoot(): string {
-  const candidates = [
+  const directCandidates = [
     path.resolve(app.getAppPath(), '../../workflows'),
     path.resolve(app.getAppPath(), '../workflows'),
     path.resolve(app.getAppPath(), 'workflows'),
-    path.resolve(process.cwd(), 'workflows'),
   ];
 
-  const existing = candidates.find((candidate) => existsSync(candidate));
-  return existing ?? candidates[0];
+  const directMatch = directCandidates.find((candidate) => existsSync(candidate));
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const nearestFromAppPath = findNearestWorkflowsRoot(app.getAppPath());
+  if (nearestFromAppPath) {
+    return nearestFromAppPath;
+  }
+
+  return directCandidates[0];
 }
 
 const workflowCatalogService = createWorkflowCatalogService({
