@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, dialog } from 'electron';
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -703,6 +703,22 @@ function findNearestWorkflowsRoot(startDir: string): string | null {
   return null;
 }
 
+function hasWorkflowMetaFiles(rootPath: string): boolean {
+  const categories = ['images', 'videos', 'audio'];
+  try {
+    return categories.some((category) => {
+      const categoryDir = path.join(rootPath, category);
+      if (!existsSync(categoryDir)) {
+        return false;
+      }
+      const files = readdirSync(categoryDir, { withFileTypes: true });
+      return files.some((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.meta.json'));
+    });
+  } catch {
+    return false;
+  }
+}
+
 function resolveGlobalWorkflowsRoot(): string {
   const directCandidates = [
     // Robust for electron-vite dev build output (apps/desktop/out/main -> repo/workflows)
@@ -713,14 +729,19 @@ function resolveGlobalWorkflowsRoot(): string {
     path.resolve(app.getAppPath(), 'workflows'),
   ];
 
-  const directMatch = directCandidates.find((candidate) => existsSync(candidate));
-  if (directMatch) {
-    return directMatch;
+  const populatedMatch = directCandidates.find((candidate) => existsSync(candidate) && hasWorkflowMetaFiles(candidate));
+  if (populatedMatch) {
+    return populatedMatch;
   }
 
   const nearestFromAppPath = findNearestWorkflowsRoot(app.getAppPath());
-  if (nearestFromAppPath) {
+  if (nearestFromAppPath && hasWorkflowMetaFiles(nearestFromAppPath)) {
     return nearestFromAppPath;
+  }
+
+  const existingMatch = directCandidates.find((candidate) => existsSync(candidate));
+  if (existingMatch) {
+    return existingMatch;
   }
 
   return directCandidates[0];
