@@ -476,7 +476,7 @@ export function createTimelineSlice(
             return { lastError: `Clip "${selected.clipId}" not found.` };
           }
 
-          const nextGain = Math.max(0, Math.min(2, Math.round(gain * 100) / 100));
+          const nextGain = Math.max(0, Math.min(1, Math.round(gain * 100) / 100));
           const clip = track.clips[clipIndex];
           if (Math.abs((clip.gain ?? 1) - nextGain) < 1e-9) {
             return state;

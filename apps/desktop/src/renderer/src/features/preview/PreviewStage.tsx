@@ -333,7 +333,7 @@ export default function PreviewStage() {
         }
       }
 
-      audio.volume = Math.max(0, Math.min(2, activeItem.gain));
+      audio.volume = Math.max(0, Math.min(1, activeItem.gain));
 
       if (isPlaying) {
         if (audio.paused) {

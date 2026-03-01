@@ -587,11 +587,11 @@ export default function TimelineDock() {
                   -VOL
                 </button>
                 <div className="px-2 py-1 rounded-lg border border-violet-400/20 bg-violet-500/10 text-[10px] font-mono text-violet-200">
-                  {(Math.max(0, Math.min(2, selectedAudioClipGain)) * 100).toFixed(0)}%
+                  {(Math.max(0, Math.min(1, selectedAudioClipGain)) * 100).toFixed(0)}%
                 </div>
                 <button
-                  disabled={selectedAudioClipGain >= 2}
-                  onClick={() => setSelectedClipGain(Math.min(2, selectedAudioClipGain + 0.1))}
+                  disabled={selectedAudioClipGain >= 1}
+                  onClick={() => setSelectedClipGain(Math.min(1, selectedAudioClipGain + 0.1))}
                   className="px-2 py-1 rounded-lg bg-zinc-900/40 border border-white/5 text-[10px] font-black tracking-wider text-violet-300 hover:text-violet-200 disabled:opacity-40 transition-all"
                   title="Audio Gain +0.1"
                 >
