@@ -12,6 +12,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import type { ComfyWorkflowRunRequest, GenericComfyWorkflowRunRequest } from "@shared/comfy";
+import type { WorkflowPresetItem, WorkflowPresetsMap } from "@shared/ipc/project";
 import type { Asset } from "@shared/types";
 import { useShallow } from "zustand/shallow";
 import type {
@@ -50,13 +51,7 @@ type ImportAllSummary = {
   message: string;
 };
 
-type WorkflowPreset = {
-  id: string;
-  name: string;
-  draft: Draft;
-  createdAt: string;
-  updatedAt: string;
-};
+type WorkflowPreset = WorkflowPresetItem;
 
 const CATS: Array<{ id: WorkflowCatalogCategory; label: string; icon: React.ReactNode }> = [
   { id: "images", label: "Images", icon: <ImageIcon size={14} /> },
@@ -107,6 +102,8 @@ export default function WorkflowStudioView() {
     }
   });
   const [presetsByWorkflow, setPresetsByWorkflow] = useState<Record<string, WorkflowPreset[]>>({});
+  const [presetsHydrated, setPresetsHydrated] = useState(false);
+  const [isSavingPresets, setIsSavingPresets] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [presetName, setPresetName] = useState("");
 
@@ -163,17 +160,84 @@ export default function WorkflowStudioView() {
   }, [wfId]);
 
   useEffect(() => {
-    if (!projectRoot) {
-      setPresetsByWorkflow({});
-      return;
+    let isCancelled = false;
+
+    async function hydrateWorkflowPresets(): Promise<void> {
+      if (!projectRoot) {
+        setPresetsByWorkflow({});
+        setPresetsHydrated(false);
+        return;
+      }
+
+      setPresetsHydrated(false);
+      try {
+        const response = await getIpcClient().getWorkflowPresets();
+        if (isCancelled) return;
+        if (response.success) {
+          setPresetsByWorkflow(response.presets ?? {});
+        } else {
+          setPresetsByWorkflow({});
+          setSendState({ status: "error", message: response.message || "Workflow-Presets konnten nicht geladen werden." });
+        }
+      } catch (error) {
+        if (isCancelled) return;
+        setPresetsByWorkflow({});
+        setSendState({
+          status: "error",
+          message: `Workflow-Presets konnten nicht geladen werden: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      } finally {
+        if (!isCancelled) {
+          setPresetsHydrated(true);
+        }
+      }
     }
-    setPresetsByWorkflow(loadWorkflowPresets(projectRoot));
+
+    void hydrateWorkflowPresets();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [projectRoot]);
 
   useEffect(() => {
-    if (!projectRoot) return;
-    saveWorkflowPresets(projectRoot, presetsByWorkflow);
-  }, [projectRoot, presetsByWorkflow]);
+    let isCancelled = false;
+
+    async function persistWorkflowPresets(): Promise<void> {
+      if (!projectRoot || !presetsHydrated) return;
+      setIsSavingPresets(true);
+      try {
+        const response = await getIpcClient().saveWorkflowPresets(presetsByWorkflow as WorkflowPresetsMap);
+        if (isCancelled) return;
+        if (response.success) {
+          const merged = response.presets ?? {};
+          const currentJson = JSON.stringify(presetsByWorkflow);
+          const mergedJson = JSON.stringify(merged);
+          if (currentJson !== mergedJson) {
+            setPresetsByWorkflow(merged);
+          }
+        } else {
+          setSendState({ status: "error", message: response.message || "Workflow-Presets konnten nicht gespeichert werden." });
+        }
+      } catch (error) {
+        if (isCancelled) return;
+        setSendState({
+          status: "error",
+          message: `Workflow-Presets konnten nicht gespeichert werden: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      } finally {
+        if (!isCancelled) {
+          setIsSavingPresets(false);
+        }
+      }
+    }
+
+    void persistWorkflowPresets();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [projectRoot, presetsByWorkflow, presetsHydrated]);
 
   useEffect(() => {
     try {
@@ -519,13 +583,13 @@ export default function WorkflowStudioView() {
                           <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
                       </select>
-                      <button onClick={onApplyPreset} disabled={!selectedPresetId} className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-950/60 text-[9px] font-black uppercase tracking-wider text-zinc-300 disabled:opacity-40">
+                      <button onClick={onApplyPreset} disabled={!selectedPresetId || isSavingPresets} className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-950/60 text-[9px] font-black uppercase tracking-wider text-zinc-300 disabled:opacity-40">
                         Apply
                       </button>
-                      <button onClick={onSavePreset} className="px-3 py-2 rounded-lg border border-emerald-400/20 bg-emerald-400/10 text-[9px] font-black uppercase tracking-wider text-emerald-200">
-                        Save
+                      <button onClick={onSavePreset} disabled={isSavingPresets} className="px-3 py-2 rounded-lg border border-emerald-400/20 bg-emerald-400/10 text-[9px] font-black uppercase tracking-wider text-emerald-200 disabled:opacity-40">
+                        {isSavingPresets ? "Saving..." : "Save"}
                       </button>
-                      <button onClick={onDeletePreset} disabled={!selectedPresetId} className="px-3 py-2 rounded-lg border border-red-400/20 bg-red-400/10 text-[9px] font-black uppercase tracking-wider text-red-200 disabled:opacity-40">
+                      <button onClick={onDeletePreset} disabled={!selectedPresetId || isSavingPresets} className="px-3 py-2 rounded-lg border border-red-400/20 bg-red-400/10 text-[9px] font-black uppercase tracking-wider text-red-200 disabled:opacity-40">
                         Delete
                       </button>
                     </div>
@@ -845,30 +909,6 @@ function makePresetId(): string {
     return `preset_${globalThis.crypto.randomUUID()}`;
   }
   return `preset_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function workflowPresetStorageKey(projectRoot: string): string {
-  return `workflowStudio.presets.${projectRoot.toLowerCase()}`;
-}
-
-function loadWorkflowPresets(projectRoot: string): Record<string, WorkflowPreset[]> {
-  try {
-    const raw = window.localStorage.getItem(workflowPresetStorageKey(projectRoot));
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, WorkflowPreset[]>;
-    if (!parsed || typeof parsed !== "object") return {};
-    return parsed;
-  } catch {
-    return {};
-  }
-}
-
-function saveWorkflowPresets(projectRoot: string, presets: Record<string, WorkflowPreset[]>): void {
-  try {
-    window.localStorage.setItem(workflowPresetStorageKey(projectRoot), JSON.stringify(presets));
-  } catch {
-    // ignore storage errors
-  }
 }
 
 function statusBadgeClass(status: "pending" | "running" | "success" | "failed"): string {

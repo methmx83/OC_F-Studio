@@ -22,7 +22,14 @@ export type {
 export { IPC_CHANNELS } from './ipc/channels.js';
 export type { AssetImportResponse } from './ipc/assets.js';
 export type { FfmpegHealthResponse, ProxyResponse } from './ipc/ffmpeg.js';
-export type { ProjectResponse, WorkflowTemplateImportResponse } from './ipc/project.js';
+export type {
+  ProjectResponse,
+  WorkflowPresetDraft,
+  WorkflowPresetItem,
+  WorkflowPresetsMap,
+  WorkflowPresetsResponse,
+  WorkflowTemplateImportResponse,
+} from './ipc/project.js';
 export type {
   WorkflowCatalogCategory,
   WorkflowCatalogEntry,

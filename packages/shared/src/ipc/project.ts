@@ -13,3 +13,26 @@ export interface WorkflowTemplateImportResponse {
   relativePath?: string;
 }
 
+export interface WorkflowPresetDraft {
+  settings: Record<'width' | 'height' | 'fps' | 'frames' | 'steps', string>;
+  inputs: Record<string, string>;
+}
+
+export interface WorkflowPresetItem {
+  id: string;
+  name: string;
+  draft: WorkflowPresetDraft;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowPresetsMap {
+  [workflowId: string]: WorkflowPresetItem[];
+}
+
+export interface WorkflowPresetsResponse {
+  success: boolean;
+  message: string;
+  presets: WorkflowPresetsMap;
+}
+

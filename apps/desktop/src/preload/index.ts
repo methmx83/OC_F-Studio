@@ -3,7 +3,12 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from '@ai-filmstudio/shared';
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
-import type { ProjectResponse, WorkflowTemplateImportResponse } from '@shared/ipc/project';
+import type {
+  ProjectResponse,
+  WorkflowPresetsMap,
+  WorkflowPresetsResponse,
+  WorkflowTemplateImportResponse,
+} from '@shared/ipc/project';
 import type { Asset, Project } from '@shared/types';
 import type {
   ComfyHealthResponse,
@@ -37,6 +42,12 @@ contextBridge.exposeInMainWorld('projectApi', {
   },
   importWorkflowTemplate: async (workflowId: string): Promise<WorkflowTemplateImportResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.importWorkflowTemplate, workflowId) as Promise<WorkflowTemplateImportResponse>;
+  },
+  getWorkflowPresets: async (): Promise<WorkflowPresetsResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.getWorkflowPresets) as Promise<WorkflowPresetsResponse>;
+  },
+  saveWorkflowPresets: async (presets: WorkflowPresetsMap): Promise<WorkflowPresetsResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.saveWorkflowPresets, presets) as Promise<WorkflowPresetsResponse>;
   },
   getProjectRoot: async (): Promise<string | null> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.getRoot) as Promise<string | null>;

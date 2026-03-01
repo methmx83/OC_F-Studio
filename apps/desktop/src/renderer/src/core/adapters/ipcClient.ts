@@ -62,6 +62,8 @@ export function getIpcClient(): IpcClient {
       const method = requireMethod(api, 'importWorkflowTemplate', WORKFLOW_TEMPLATE_IMPORT_UNAVAILABLE_MESSAGE);
       return method(workflowId);
     },
+    getWorkflowPresets: () => requireMethod(api, 'getWorkflowPresets', PROJECT_API_UNAVAILABLE_MESSAGE)(),
+    saveWorkflowPresets: (presets) => requireMethod(api, 'saveWorkflowPresets', PROJECT_API_UNAVAILABLE_MESSAGE)(presets),
     getProjectRoot: () => requireMethod(api, 'getProjectRoot', PROJECT_API_UNAVAILABLE_MESSAGE)(),
     listWorkflowCatalog: () => requireMethod(api, 'listWorkflowCatalog', PROJECT_API_UNAVAILABLE_MESSAGE)(),
     getAssetThumbnailDataUrl: (relativePath) => requireMethod(api, 'getAssetThumbnailDataUrl', PROJECT_API_UNAVAILABLE_MESSAGE)(relativePath),

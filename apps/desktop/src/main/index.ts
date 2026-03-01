@@ -5,7 +5,13 @@ import { app, BrowserWindow, dialog } from 'electron';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { IPC_CHANNELS } from '@ai-filmstudio/shared';
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
-import type { ProjectResponse, WorkflowTemplateImportResponse } from '@shared/ipc/project';
+import type {
+  ProjectResponse,
+  WorkflowPresetItem,
+  WorkflowPresetsMap,
+  WorkflowPresetsResponse,
+  WorkflowTemplateImportResponse,
+} from '@shared/ipc/project';
 import type { Asset, Project } from '@shared/types';
 import type {
   ComfyHealthResponse,
@@ -40,6 +46,7 @@ ajv.addFormat('date-time', true);
 const validateProject = ajv.compile<Project>(projectSchema);
 
 const PROJECT_FILE_NAME = 'project.json';
+const WORKFLOW_PRESETS_RELATIVE_PATH = path.join('workflows', 'presets.json');
 const COMFY_RUN_EVENT_CHANNEL = IPC_CHANNELS.comfy.runEvent;
 
 let currentProjectRoot: string | null = null;
@@ -193,6 +200,123 @@ async function ensureProjectStructure(projectRoot: string): Promise<void> {
       await fs.mkdir(resolveProjectPath(projectRoot, folder), { recursive: true });
     }),
   );
+}
+
+function normalizeWorkflowPresetsMap(value: unknown): WorkflowPresetsMap {
+  if (!isRecord(value)) return {};
+  const normalized: WorkflowPresetsMap = {};
+
+  Object.entries(value).forEach(([workflowId, rawPresets]) => {
+    if (!Array.isArray(rawPresets)) return;
+    const items: WorkflowPresetItem[] = [];
+
+    rawPresets.forEach((candidate) => {
+      if (!isRecord(candidate)) return;
+      const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
+      const name = typeof candidate.name === 'string' ? candidate.name.trim() : '';
+      const createdAt = typeof candidate.createdAt === 'string' ? candidate.createdAt : new Date().toISOString();
+      const updatedAt = typeof candidate.updatedAt === 'string' ? candidate.updatedAt : createdAt;
+      const draftCandidate = isRecord(candidate.draft) ? candidate.draft : {};
+      const settingsCandidate = isRecord(draftCandidate.settings) ? draftCandidate.settings : {};
+      const inputsCandidate = isRecord(draftCandidate.inputs) ? draftCandidate.inputs : {};
+      if (!id || !name) return;
+
+      items.push({
+        id,
+        name,
+        createdAt,
+        updatedAt,
+        draft: {
+          settings: {
+            width: String(settingsCandidate.width ?? ''),
+            height: String(settingsCandidate.height ?? ''),
+            fps: String(settingsCandidate.fps ?? ''),
+            frames: String(settingsCandidate.frames ?? ''),
+            steps: String(settingsCandidate.steps ?? ''),
+          },
+          inputs: Object.fromEntries(
+            Object.entries(inputsCandidate)
+              .filter((entry): entry is [string, unknown] => typeof entry[0] === 'string')
+              .map(([key, entryValue]) => [key, String(entryValue ?? '')]),
+          ),
+        },
+      });
+    });
+
+    if (items.length > 0) {
+      normalized[workflowId] = items
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 20);
+    }
+  });
+
+  return normalized;
+}
+
+function mergeWorkflowPresets(base: WorkflowPresetsMap, incoming: WorkflowPresetsMap): WorkflowPresetsMap {
+  const merged: WorkflowPresetsMap = {};
+  const workflowIds = new Set([...Object.keys(base), ...Object.keys(incoming)]);
+
+  workflowIds.forEach((workflowId) => {
+    const byId = new Map<string, WorkflowPresetItem>();
+    [...(base[workflowId] ?? []), ...(incoming[workflowId] ?? [])].forEach((preset) => {
+      const existing = byId.get(preset.id);
+      if (!existing) {
+        byId.set(preset.id, preset);
+        return;
+      }
+      const existingTs = new Date(existing.updatedAt).getTime();
+      const nextTs = new Date(preset.updatedAt).getTime();
+      if (Number.isFinite(nextTs) && (!Number.isFinite(existingTs) || nextTs >= existingTs)) {
+        byId.set(preset.id, preset);
+      }
+    });
+
+    const list = Array.from(byId.values())
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, 20);
+
+    if (list.length > 0) {
+      merged[workflowId] = list;
+    }
+  });
+
+  return merged;
+}
+
+async function readWorkflowPresetsFromDisk(projectRoot: string): Promise<WorkflowPresetsMap> {
+  const presetsPath = resolveProjectPath(projectRoot, WORKFLOW_PRESETS_RELATIVE_PATH);
+  try {
+    const raw = await fs.readFile(presetsPath, 'utf-8');
+    return normalizeWorkflowPresetsMap(JSON.parse(raw));
+  } catch {
+    return {};
+  }
+}
+
+async function getWorkflowPresets(): Promise<WorkflowPresetsResponse> {
+  if (!currentProjectRoot) {
+    return { success: false, message: 'No ProjectRoot set. Create or load a project first.', presets: {} };
+  }
+
+  const presets = await readWorkflowPresetsFromDisk(currentProjectRoot);
+  return { success: true, message: 'Workflow presets loaded.', presets };
+}
+
+async function saveWorkflowPresets(presets: WorkflowPresetsMap): Promise<WorkflowPresetsResponse> {
+  if (!currentProjectRoot) {
+    return { success: false, message: 'No ProjectRoot set. Create or load a project first.', presets: {} };
+  }
+
+  const presetsPath = resolveProjectPath(currentProjectRoot, WORKFLOW_PRESETS_RELATIVE_PATH);
+  const normalizedIncoming = normalizeWorkflowPresetsMap(presets);
+  const diskPresets = await readWorkflowPresetsFromDisk(currentProjectRoot);
+  const merged = mergeWorkflowPresets(diskPresets, normalizedIncoming);
+
+  await fs.mkdir(path.dirname(presetsPath), { recursive: true });
+  await fs.writeFile(presetsPath, JSON.stringify(merged, null, 2), 'utf-8');
+
+  return { success: true, message: 'Workflow presets saved.', presets: merged };
 }
 
 async function saveProjectToCurrentRoot(project: Project): Promise<ProjectResponse> {
@@ -663,6 +787,12 @@ registerIpc({
   },
   importWorkflowTemplate: async (workflowId: string): Promise<WorkflowTemplateImportResponse> => {
     return importWorkflowTemplate(workflowId);
+  },
+  getWorkflowPresets: async (): Promise<WorkflowPresetsResponse> => {
+    return getWorkflowPresets();
+  },
+  saveWorkflowPresets: async (presets: WorkflowPresetsMap): Promise<WorkflowPresetsResponse> => {
+    return saveWorkflowPresets(presets);
   },
   getAssetThumbnailDataUrl: async (relativePath: string): Promise<string | null> => {
     return getAssetThumbnailDataUrlService({

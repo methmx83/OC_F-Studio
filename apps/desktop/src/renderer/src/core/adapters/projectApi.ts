@@ -1,7 +1,12 @@
 /* eslint-disable no-unused-vars */
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
-import type { ProjectResponse, WorkflowTemplateImportResponse } from '@shared/ipc/project';
+import type {
+  ProjectResponse,
+  WorkflowPresetsMap,
+  WorkflowPresetsResponse,
+  WorkflowTemplateImportResponse,
+} from '@shared/ipc/project';
 import type { Project } from '@shared/types';
 import type {
   ComfyHealthResponse,
@@ -20,6 +25,8 @@ export interface ProjectApiPort {
   importAudio: () => Promise<AssetImportResponse>;
   importComfyOutput: (outputPath: string) => Promise<AssetImportResponse>;
   importWorkflowTemplate: (workflowId: string) => Promise<WorkflowTemplateImportResponse>;
+  getWorkflowPresets: () => Promise<WorkflowPresetsResponse>;
+  saveWorkflowPresets: (presets: WorkflowPresetsMap) => Promise<WorkflowPresetsResponse>;
   getProjectRoot: () => Promise<string | null>;
   listWorkflowCatalog: () => Promise<WorkflowCatalogResponse>;
   getAssetThumbnailDataUrl: (relativePath: string) => Promise<string | null>;
