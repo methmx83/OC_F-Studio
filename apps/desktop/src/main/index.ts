@@ -685,6 +685,7 @@ const comfyService = createComfyService({
 
 const workflowCatalogService = createWorkflowCatalogService({
   getCurrentProjectRoot: () => currentProjectRoot,
+  getGlobalWorkflowsRoot: () => path.resolve(app.getAppPath(), '../../workflows'),
   resolveProjectPath,
 });
 

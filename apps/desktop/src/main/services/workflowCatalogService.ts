@@ -19,6 +19,7 @@ export interface WorkflowCatalogService {
 
 export interface CreateWorkflowCatalogServiceOptions {
   getCurrentProjectRoot(): string | null;
+  getGlobalWorkflowsRoot(): string;
   resolveProjectPath(projectRoot: string, relativePath: string): string;
 }
 
@@ -156,63 +157,75 @@ export function createWorkflowCatalogService(
   return {
     async listCatalog(): Promise<WorkflowCatalogResponse> {
       const projectRoot = options.getCurrentProjectRoot();
-      if (!projectRoot) {
-        return {
-          success: false,
-          message: 'No project loaded. Create or load a project first.',
-          warnings: [],
-          workflows: [],
-        };
+      const globalWorkflowsRoot = options.getGlobalWorkflowsRoot();
+      const rootsToScan: Array<{ rootPath: string; label: string; projectBound: boolean }> = [
+        { rootPath: globalWorkflowsRoot, label: 'global', projectBound: false },
+      ];
+      if (projectRoot) {
+        rootsToScan.push({
+          rootPath: options.resolveProjectPath(projectRoot, 'workflows'),
+          label: 'project',
+          projectBound: true,
+        });
       }
 
-      const workflowsRoot = options.resolveProjectPath(projectRoot, 'workflows');
-      const entries: WorkflowCatalogEntry[] = [];
+      const entriesById = new Map<string, WorkflowCatalogEntry>();
       const warnings: string[] = [];
 
-      for (const category of WORKFLOW_CATALOG_CATEGORIES) {
-        const categoryDir = options.resolveProjectPath(workflowsRoot, category);
+      for (const scanRoot of rootsToScan) {
+        for (const category of WORKFLOW_CATALOG_CATEGORIES) {
+          const categoryDir = options.resolveProjectPath(scanRoot.rootPath, category);
 
-        let dirEntries: import('node:fs').Dirent[] = [];
-        try {
-          dirEntries = await fs.readdir(categoryDir, { withFileTypes: true });
-        } catch (error) {
-          const nodeError = error as Error & { code?: string };
-          if (nodeError.code === 'ENOENT') {
+          let dirEntries: import('node:fs').Dirent[] = [];
+          try {
+            dirEntries = await fs.readdir(categoryDir, { withFileTypes: true });
+          } catch (error) {
+            const nodeError = error as Error & { code?: string };
+            if (nodeError.code === 'ENOENT') {
+              continue;
+            }
+            warnings.push(`Failed to read ${scanRoot.label} workflows/${category}: ${nodeError.message}`);
             continue;
           }
-          warnings.push(`Failed to read workflows/${category}: ${nodeError.message}`);
-          continue;
-        }
 
-        const metaFiles = dirEntries
-          .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.meta.json'))
-          .map((entry) => entry.name)
-          .sort((a, b) => a.localeCompare(b));
+          const metaFiles = dirEntries
+            .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.meta.json'))
+            .map((entry) => entry.name)
+            .sort((a, b) => a.localeCompare(b));
 
-        for (const metaFileName of metaFiles) {
-          const absoluteMetaPath = path.join(categoryDir, metaFileName);
-          try {
-            const parsedMeta = await readWorkflowMetaFile(absoluteMetaPath, category);
-            const metaRelativePath = path.posix.join('workflows', category, metaFileName);
-            const templateRelativePath = path.posix.join('workflows', category, parsedMeta.templateFile);
-            const templateAbsolutePath = options.resolveProjectPath(projectRoot, templateRelativePath);
-            const templateExists = await isReadableFile(templateAbsolutePath);
+          for (const metaFileName of metaFiles) {
+            const absoluteMetaPath = path.join(categoryDir, metaFileName);
+            try {
+              const parsedMeta = await readWorkflowMetaFile(absoluteMetaPath, category);
+              const metaRelativePath = path.posix.join('workflows', category, metaFileName);
+              const templateRelativePath = path.posix.join('workflows', category, parsedMeta.templateFile);
+              const templateAbsolutePath = options.resolveProjectPath(
+                scanRoot.rootPath,
+                path.posix.join(category, parsedMeta.templateFile),
+              );
+              const templateExists = await isReadableFile(templateAbsolutePath);
 
-            entries.push({
-              ...parsedMeta,
-              metaRelativePath,
-              templateRelativePath,
-              templateExists,
-            });
-          } catch (error) {
-            warnings.push(
-              `Invalid workflow meta (${path.posix.join('workflows', category, metaFileName)}): ${(error as Error).message}`,
-            );
+              const nextEntry: WorkflowCatalogEntry = {
+                ...parsedMeta,
+                metaRelativePath,
+                templateRelativePath,
+                templateExists,
+              };
+
+              // Project-spezifische Workflows ueberschreiben globale Workflows bei gleicher ID.
+              if (scanRoot.projectBound || !entriesById.has(parsedMeta.id)) {
+                entriesById.set(parsedMeta.id, nextEntry);
+              }
+            } catch (error) {
+              warnings.push(
+                `Invalid ${scanRoot.label} workflow meta (${path.posix.join('workflows', category, metaFileName)}): ${(error as Error).message}`,
+              );
+            }
           }
         }
       }
 
-      const sortedEntries = entries.sort((a, b) => {
+      const sortedEntries = Array.from(entriesById.values()).sort((a, b) => {
         if (a.category !== b.category) {
           return a.category.localeCompare(b.category);
         }
@@ -221,12 +234,12 @@ export function createWorkflowCatalogService(
 
       const message = sortedEntries.length > 0
         ? `Loaded ${sortedEntries.length} workflow meta file(s).`
-        : 'No workflow meta files found in project workflows folders.';
+        : 'No workflow meta files found in global/project workflows folders.';
 
       return {
         success: true,
         message,
-        projectWorkflowsRoot: workflowsRoot,
+        projectWorkflowsRoot: globalWorkflowsRoot,
         warnings,
         workflows: sortedEntries,
       };
