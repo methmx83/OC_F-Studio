@@ -4,6 +4,9 @@ import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { Project } from '@shared/types';
 import type {
+  CancelComfyRunRequest,
+  CancelComfyRunResponse,
+  ComfyHealthRequest,
   ComfyHealthResponse,
   ComfyRunEvent,
   ComfyWorkflowRunRequest,
@@ -33,8 +36,9 @@ export type ComfyBaseUrlPolicyResult =
   };
 
 export interface ComfyService {
-  getComfyHealth(): Promise<ComfyHealthResponse>;
+  getComfyHealth(request?: ComfyHealthRequest): Promise<ComfyHealthResponse>;
   queueComfyRun(payload: QueueComfyRunRequest): Promise<QueueComfyRunResponse>;
+  cancelComfyRun(payload: CancelComfyRunRequest): Promise<CancelComfyRunResponse>;
   dispose(): void;
 }
 
@@ -92,11 +96,14 @@ function appendWarning(message: string, warningMessage: string | null): string {
   return `${message} ${warningMessage}`;
 }
 
-export function resolveComfyBaseUrlPolicy(): ComfyBaseUrlPolicyResult {
+export function resolveComfyBaseUrlPolicy(baseUrlOverride?: string): ComfyBaseUrlPolicyResult {
+  const overrideUrl = baseUrlOverride?.trim();
   const configuredUrl = process.env.COMFYUI_BASE_URL?.trim();
-  const unresolvedBaseUrl = configuredUrl && configuredUrl.length > 0
-    ? configuredUrl
-    : COMFY_DEFAULT_BASE_URL;
+  const unresolvedBaseUrl = overrideUrl && overrideUrl.length > 0
+    ? overrideUrl
+    : configuredUrl && configuredUrl.length > 0
+      ? configuredUrl
+      : COMFY_DEFAULT_BASE_URL;
 
   let parsed: URL;
   try {
@@ -138,8 +145,8 @@ export function resolveComfyBaseUrlPolicy(): ComfyBaseUrlPolicyResult {
   };
 }
 
-export function resolveComfyBaseUrl(): string {
-  const resolution = resolveComfyBaseUrlPolicy();
+export function resolveComfyBaseUrl(baseUrlOverride?: string): string {
+  const resolution = resolveComfyBaseUrlPolicy(baseUrlOverride);
   if (!resolution.ok) {
     throw new Error(resolution.message);
   }
@@ -293,6 +300,19 @@ function collectMissingTemplateTokens(
 
 interface ComfyPromptSubmitResult {
   promptId: string;
+}
+
+async function requestComfyInterrupt(baseUrl: string): Promise<void> {
+  const response = await fetch(`${baseUrl}/interrupt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new Error(`ComfyUI /interrupt failed with HTTP ${response.status}: ${raw.slice(0, 200)}`);
+  }
 }
 
 async function submitComfyPrompt(baseUrl: string, promptTemplate: JsonValue): Promise<ComfyPromptSubmitResult> {
@@ -586,8 +606,8 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
   }
 
   return {
-    async getComfyHealth(): Promise<ComfyHealthResponse> {
-      const resolution = resolveComfyBaseUrlPolicy();
+    async getComfyHealth(request?: ComfyHealthRequest): Promise<ComfyHealthResponse> {
+      const resolution = resolveComfyBaseUrlPolicy(request?.baseUrlOverride);
       if (!resolution.ok) {
         return {
           online: false,
@@ -641,7 +661,7 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
       }
 
       const workflowRequest = payload.request;
-      const baseUrlResolution = resolveComfyBaseUrlPolicy();
+      const baseUrlResolution = resolveComfyBaseUrlPolicy(payload.baseUrlOverride);
       if (!baseUrlResolution.ok) {
         const message = `Failed to queue workflow: ${baseUrlResolution.message}`;
         options.emitRunEvent({
@@ -740,6 +760,59 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
           runId,
         };
       }
+    },
+
+    async cancelComfyRun(payload: CancelComfyRunRequest): Promise<CancelComfyRunResponse> {
+      const runId = payload.runId?.trim();
+      if (!runId) {
+        return { success: false, message: 'Missing runId.', runId: payload.runId };
+      }
+
+      stopPollingRun(runId);
+
+      const baseUrlResolution = resolveComfyBaseUrlPolicy(payload.baseUrlOverride);
+      if (!baseUrlResolution.ok) {
+        const message = `Failed to cancel workflow: ${baseUrlResolution.message}`;
+        options.emitRunEvent({
+          runId,
+          workflowId: 'unknown',
+          promptId: payload.promptId,
+          status: 'failed',
+          message,
+          progress: null,
+          outputPaths: [],
+        });
+        return { success: false, message, runId };
+      }
+
+      try {
+        await requestComfyInterrupt(baseUrlResolution.baseUrl);
+      } catch (error) {
+        const message = `Comfy cancel request failed: ${(error as Error).message}`;
+        options.emitRunEvent({
+          runId,
+          workflowId: 'unknown',
+          promptId: payload.promptId,
+          status: 'failed',
+          message,
+          progress: null,
+          outputPaths: [],
+        });
+        return { success: false, message, runId };
+      }
+
+      const message = 'Workflow cancel requested by user.';
+      options.emitRunEvent({
+        runId,
+        workflowId: 'unknown',
+        promptId: payload.promptId,
+        status: 'failed',
+        message,
+        progress: null,
+        outputPaths: [],
+      });
+
+      return { success: true, message, runId };
     },
 
     dispose(): void {

@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import type { ComfyHealthResponse, ComfyRunEvent, QueueComfyRunRequest, QueueComfyRunResponse } from '@shared/comfy';
+import type { CancelComfyRunRequest, CancelComfyRunResponse, ComfyHealthRequest, ComfyHealthResponse, ComfyRunEvent, QueueComfyRunRequest, QueueComfyRunResponse } from '@shared/comfy';
 import type { WorkflowTemplateImportResponse } from '@shared/ipc/project';
 import {
   getProjectApi,
@@ -72,12 +72,16 @@ export function getIpcClient(): IpcClient {
     getFfmpegHealth: () => requireMethod(api, 'getFfmpegHealth', PROJECT_API_UNAVAILABLE_MESSAGE)(),
     ensureVideoProxy: (relativeVideoPath) => requireMethod(api, 'ensureVideoProxy', PROJECT_API_UNAVAILABLE_MESSAGE)(relativeVideoPath),
     getAudioWaveformPeaks: (relativeAudioPath, bins) => requireMethod(api, 'getAudioWaveformPeaks', PROJECT_API_UNAVAILABLE_MESSAGE)(relativeAudioPath, bins),
-    getComfyHealth: async (): Promise<ComfyHealthResponse> => {
+    getComfyHealth: async (request?: ComfyHealthRequest): Promise<ComfyHealthResponse> => {
       const method = requireMethod(api, 'getComfyHealth', COMFY_BRIDGE_UNAVAILABLE_MESSAGE);
-      return method();
+      return method(request);
     },
     queueComfyRun: async (payload: QueueComfyRunRequest): Promise<QueueComfyRunResponse> => {
       const method = requireMethod(api, 'queueComfyRun', COMFY_BRIDGE_UNAVAILABLE_MESSAGE);
+      return method(payload);
+    },
+    cancelComfyRun: async (payload: CancelComfyRunRequest): Promise<CancelComfyRunResponse> => {
+      const method = requireMethod(api, 'cancelComfyRun', COMFY_BRIDGE_UNAVAILABLE_MESSAGE);
       return method(payload);
     },
     onComfyRunEvent: (listener: (event: ComfyRunEvent) => void): (() => void) => {

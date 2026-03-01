@@ -20,11 +20,23 @@ interface ComfySliceDeps {
 
 type ComfySliceKeys =
   | 'comfyOnline'
+  | 'comfyBaseUrl'
   | 'queuedWorkflowRuns'
+  | 'setComfyBaseUrl'
   | 'checkComfyHealth'
   | 'bindComfyRunEvents';
 
 let comfyRunEventUnsubscribe: (() => void) | null = null;
+const COMFY_BASE_URL_STORAGE_KEY = 'ai-filmstudio.comfy.baseUrl';
+
+function readStoredComfyBaseUrl(): string {
+  try {
+    const raw = globalThis.localStorage?.getItem(COMFY_BASE_URL_STORAGE_KEY)?.trim();
+    return raw ?? '';
+  } catch {
+    return '';
+  }
+}
 
 export function createComfySlice(
   set: StoreSet<StudioState>,
@@ -33,12 +45,29 @@ export function createComfySlice(
 ): Pick<StudioState, ComfySliceKeys> {
   return {
     comfyOnline: false,
+    comfyBaseUrl: readStoredComfyBaseUrl(),
     queuedWorkflowRuns: [],
+
+    setComfyBaseUrl: (url) => {
+      const normalized = url.trim();
+      try {
+        if (normalized.length === 0) {
+          globalThis.localStorage?.removeItem(COMFY_BASE_URL_STORAGE_KEY);
+        } else {
+          globalThis.localStorage?.setItem(COMFY_BASE_URL_STORAGE_KEY, normalized);
+        }
+      } catch {
+        // ignore storage errors
+      }
+
+      set({ comfyBaseUrl: normalized });
+    },
 
     checkComfyHealth: async () => {
       try {
         const ipc = getIpcClient();
-        const response = await ipc.getComfyHealth();
+        const baseUrlOverride = get().comfyBaseUrl.trim();
+        const response = await ipc.getComfyHealth(baseUrlOverride.length > 0 ? { baseUrlOverride } : undefined);
         set({
           comfyOnline: response.online,
           projectMessage: response.online ? response.message : get().projectMessage,

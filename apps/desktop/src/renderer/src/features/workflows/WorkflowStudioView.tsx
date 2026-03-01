@@ -9,7 +9,9 @@ import {
   RefreshCw,
   RotateCcw,
   Send,
+  Square,
   TriangleAlert,
+  WandSparkles,
 } from "lucide-react";
 import type { ComfyWorkflowRunRequest, GenericComfyWorkflowRunRequest } from "@shared/comfy";
 import type { WorkflowPresetItem, WorkflowPresetsMap } from "@shared/ipc/project";
@@ -72,9 +74,12 @@ export default function WorkflowStudioView() {
     projectRoot,
     assets,
     comfyOnline,
+    comfyBaseUrl,
     isProjectBusy,
     queuedWorkflowRuns,
     importComfyOutputAsset,
+    dropAssetToTimeline,
+    setComfyBaseUrl,
     checkComfyHealth,
   } = useStudioStore(useShallow(selectWorkflowStudioStoreState));
 
@@ -83,14 +88,16 @@ export default function WorkflowStudioView() {
   const [cat, setCat] = useState<WorkflowCatalogCategory>("videos");
   const [wfId, setWfId] = useState("");
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const [sendState, setSendState] = useState<{ status: SendStatus; message: string; runId?: string; promptId?: string }>({
+  const [sendState, setSendState] = useState<{ status: SendStatus; message: string; runId?: string; promptId?: string; hint?: string }>({
     status: "idle",
     message: "",
   });
   const [importingOutputPath, setImportingOutputPath] = useState<string | null>(null);
   const [importingRunId, setImportingRunId] = useState<string | null>(null);
   const [retryingRunId, setRetryingRunId] = useState<string | null>(null);
+  const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
   const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
+  const [copiedAuthoringHint, setCopiedAuthoringHint] = useState<"tokens" | "inputs" | null>(null);
   const [importAllSummaries, setImportAllSummaries] = useState<Record<string, ImportAllSummary>>({});
   const [runFilter, setRunFilter] = useState<RunFilter>("all");
   const [runSort, setRunSort] = useState<RunSort>(() => {
@@ -106,6 +113,8 @@ export default function WorkflowStudioView() {
   const [isSavingPresets, setIsSavingPresets] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [presetName, setPresetName] = useState("");
+  const [nowTs, setNowTs] = useState(() => Date.now());
+  const [autoPlaceImportedOutputs, setAutoPlaceImportedOutputs] = useState(true);
 
   useEffect(() => {
     if (!projectRoot) {
@@ -247,6 +256,13 @@ export default function WorkflowStudioView() {
     }
   }, [runSort]);
 
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setNowTs(Date.now());
+    }, 15000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const draft = useMemo(() => (selected ? mergeDraft(selected, drafts[selected.id]) : null), [selected, drafts]);
   const validation = useMemo(() => (selected && draft ? validate(selected, draft, assets) : null), [selected, draft, assets]);
   const selectedWorkflowRuns = useMemo(
@@ -272,6 +288,7 @@ export default function WorkflowStudioView() {
     return list;
   }, [filteredWorkflowRuns, runSort]);
   const workflowPresets = useMemo(() => (selected ? presetsByWorkflow[selected.id] ?? [] : []), [selected, presetsByWorkflow]);
+  const expectedTemplateTokens = useMemo(() => (selected ? buildExpectedTemplateTokens(selected.inputs) : []), [selected]);
 
   // eslint-disable-next-line no-unused-vars
   const patchDraft = (fn: (draftValue: Draft) => Draft) => {
@@ -332,10 +349,16 @@ export default function WorkflowStudioView() {
     const runId = makeRunId();
     setSendState({ status: "sending", message: `Queueing "${selected.name}"...`, runId });
     try {
-      const res = await getIpcClient().queueComfyRun({ runId, request: validation.request });
-      setSendState({ status: res.success ? "success" : "error", message: res.message, runId: res.runId, promptId: res.promptId });
+      const res = await getIpcClient().queueComfyRun({
+        runId,
+        request: validation.request,
+        baseUrlOverride: comfyBaseUrl.trim().length > 0 ? comfyBaseUrl.trim() : undefined,
+      });
+      const hint = res.success ? undefined : resolveComfyActionHint(res.message);
+      setSendState({ status: res.success ? "success" : "error", message: res.message, runId: res.runId, promptId: res.promptId, hint });
     } catch (e) {
-      setSendState({ status: "error", message: `Workflow queue request failed: ${e instanceof Error ? e.message : String(e)}`, runId });
+      const message = `Workflow queue request failed: ${e instanceof Error ? e.message : String(e)}`;
+      setSendState({ status: "error", message, runId, hint: resolveComfyActionHint(message) });
     }
   }
 
@@ -343,7 +366,17 @@ export default function WorkflowStudioView() {
     if (!canImportOutputPath(outputPath)) return;
     setImportingOutputPath(outputPath);
     try {
+      const beforeState = useStudioStore.getState();
+      const beforeAssetIds = new Set(beforeState.assets.map((asset) => asset.id));
       await importComfyOutputAsset(outputPath);
+      const afterState = useStudioStore.getState();
+      const importedAssets = afterState.assets.filter((asset) => !beforeAssetIds.has(asset.id));
+
+      if (autoPlaceImportedOutputs) {
+        importedAssets.forEach((asset) => {
+          dropAssetToTimeline(asset.id);
+        });
+      }
     } finally {
       setImportingOutputPath(null);
     }
@@ -385,12 +418,20 @@ export default function WorkflowStudioView() {
       let imported = 0;
 
       for (const outputPath of importablePaths) {
-        const beforeAssetCount = useStudioStore.getState().assets.length;
+        const beforeState = useStudioStore.getState();
+        const beforeAssetIds = new Set(beforeState.assets.map((asset) => asset.id));
         try {
           await importComfyOutputAsset(outputPath);
           const afterState = useStudioStore.getState();
-          if (afterState.assets.length > beforeAssetCount) {
+          const importedAssets = afterState.assets.filter((asset) => !beforeAssetIds.has(asset.id));
+
+          if (importedAssets.length > 0) {
             imported += 1;
+            if (autoPlaceImportedOutputs) {
+              importedAssets.forEach((asset) => {
+                dropAssetToTimeline(asset.id);
+              });
+            }
           } else {
             addReason("NO_CHANGE_OR_REJECTED", outputPath);
           }
@@ -417,16 +458,60 @@ export default function WorkflowStudioView() {
   }
 
   async function onRetryRun(run: { id: string; workflowName: string; request: ComfyWorkflowRunRequest }): Promise<void> {
+    const duplicateActiveRun = queuedWorkflowRuns.find((candidate) => {
+      if (candidate.id === run.id) return false;
+      if (candidate.status !== "pending" && candidate.status !== "running") return false;
+      return JSON.stringify(candidate.request) === JSON.stringify(run.request);
+    });
+
+    if (duplicateActiveRun) {
+      setSendState({
+        status: "error",
+        message: `Retry blockiert: Fuer diesen Request laeuft bereits ein aktiver Run (${duplicateActiveRun.id}).`,
+        runId: duplicateActiveRun.id,
+        hint: "Warte auf Abschluss oder pruefe den aktiven Run in Recent Runs.",
+      });
+      return;
+    }
+
     const retryRunId = makeRunId();
     setRetryingRunId(run.id);
     setSendState({ status: "sending", message: `Retrying "${run.workflowName}"...`, runId: retryRunId });
     try {
-      const res = await getIpcClient().queueComfyRun({ runId: retryRunId, request: run.request });
-      setSendState({ status: res.success ? "success" : "error", message: res.message, runId: res.runId, promptId: res.promptId });
+      const res = await getIpcClient().queueComfyRun({
+        runId: retryRunId,
+        request: run.request,
+        baseUrlOverride: comfyBaseUrl.trim().length > 0 ? comfyBaseUrl.trim() : undefined,
+      });
+      const hint = res.success ? undefined : resolveComfyActionHint(res.message);
+      setSendState({ status: res.success ? "success" : "error", message: res.message, runId: res.runId, promptId: res.promptId, hint });
     } catch (e) {
-      setSendState({ status: "error", message: `Retry request failed: ${e instanceof Error ? e.message : String(e)}`, runId: retryRunId });
+      const message = `Retry request failed: ${e instanceof Error ? e.message : String(e)}`;
+      setSendState({ status: "error", message, runId: retryRunId, hint: resolveComfyActionHint(message) });
     } finally {
       setRetryingRunId(null);
+    }
+  }
+
+  async function onCancelRun(run: { id: string; promptId: string | null }): Promise<void> {
+    setCancellingRunId(run.id);
+    try {
+      const response = await getIpcClient().cancelComfyRun({
+        runId: run.id,
+        promptId: run.promptId ?? undefined,
+        baseUrlOverride: comfyBaseUrl.trim().length > 0 ? comfyBaseUrl.trim() : undefined,
+      });
+      setSendState({
+        status: response.success ? "success" : "error",
+        message: response.message,
+        runId: response.runId,
+        hint: response.success ? undefined : resolveComfyActionHint(response.message),
+      });
+    } catch (e) {
+      const message = `Cancel request failed: ${e instanceof Error ? e.message : String(e)}`;
+      setSendState({ status: "error", message, runId: run.id, hint: resolveComfyActionHint(message) });
+    } finally {
+      setCancellingRunId(null);
     }
   }
 
@@ -444,6 +529,35 @@ export default function WorkflowStudioView() {
       }, 1500);
     } catch (e) {
       setSendState({ status: "error", message: `Copy prompt payload failed: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
+
+  async function onCopyExpectedTokens(): Promise<void> {
+    if (!selected) return;
+    const text = expectedTemplateTokens.map((token) => `{{${token}}}`).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedAuthoringHint("tokens");
+      window.setTimeout(() => setCopiedAuthoringHint((current) => (current === "tokens" ? null : current)), 1500);
+    } catch (e) {
+      setSendState({ status: "error", message: `Copy template tokens failed: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
+
+  async function onCopyMetaInputStubs(): Promise<void> {
+    if (!selected) return;
+    const stubs = selected.inputs.map((input) => ({
+      key: input.key,
+      label: input.label,
+      type: input.type,
+      required: input.required,
+    }));
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(stubs, null, 2));
+      setCopiedAuthoringHint("inputs");
+      window.setTimeout(() => setCopiedAuthoringHint((current) => (current === "inputs" ? null : current)), 1500);
+    } catch (e) {
+      setSendState({ status: "error", message: `Copy meta input stubs failed: ${e instanceof Error ? e.message : String(e)}` });
     }
   }
 
@@ -516,14 +630,24 @@ export default function WorkflowStudioView() {
               <div className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-400">Workflow Studio</div>
               <div className="text-[9px] text-zinc-500 mt-1">Project-local workflow meta catalog ({catalog?.workflows.length ?? 0} entries)</div>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => void checkComfyHealth()} className="px-3 py-2 rounded-xl border border-white/5 bg-zinc-950/60 text-[9px] font-black uppercase tracking-widest text-zinc-300 hover:text-white hover:border-zinc-700" title="Refresh ComfyUI health">
-                <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${comfyOnline ? "bg-emerald-400" : "bg-red-400"}`} />
-                {comfyOnline ? "Comfy Online" : "Comfy Offline"}
-              </button>
-              <button onClick={() => void onSend()} disabled={sendState.status === "sending" || !validation?.canSend} className="px-4 py-2 rounded-xl bg-white text-black text-[10px] font-black uppercase tracking-widest disabled:opacity-40 flex items-center gap-2">
-                <Send size={12} /> {sendState.status === "sending" ? "Sending..." : "Send to ComfyUI"}
-              </button>
+            <div className="flex flex-col gap-2 min-w-[360px]">
+              <div className="flex items-center gap-2">
+                <input
+                  value={comfyBaseUrl}
+                  onChange={(event) => setComfyBaseUrl(event.target.value)}
+                  placeholder="Comfy URL Override (z. B. http://127.0.0.1:8188)"
+                  className="flex-1 px-3 py-2 rounded-xl border border-white/10 bg-zinc-950/70 text-[10px] font-mono text-zinc-200 placeholder:text-zinc-600"
+                />
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <button onClick={() => void checkComfyHealth()} className="px-3 py-2 rounded-xl border border-white/5 bg-zinc-950/60 text-[9px] font-black uppercase tracking-widest text-zinc-300 hover:text-white hover:border-zinc-700" title="Refresh ComfyUI health">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${comfyOnline ? "bg-emerald-400" : "bg-red-400"}`} />
+                  {comfyOnline ? "Comfy Online" : "Comfy Offline"}
+                </button>
+                <button onClick={() => void onSend()} disabled={sendState.status === "sending" || !validation?.canSend} className="px-4 py-2 rounded-xl bg-white text-black text-[10px] font-black uppercase tracking-widest disabled:opacity-40 flex items-center gap-2">
+                  <Send size={12} /> {sendState.status === "sending" ? "Sending..." : "Send to ComfyUI"}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -642,6 +766,7 @@ export default function WorkflowStudioView() {
                       <div className={`mt-3 rounded-xl border px-3 py-3 ${sendState.status === "success" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200" : sendState.status === "error" ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-blue-500/20 bg-blue-500/10 text-blue-200"}`}>
                         <div className="font-bold uppercase tracking-wider text-[9px]">{sendState.status === "success" ? "Queued" : sendState.status === "error" ? "Send Failed" : "Submitting"}</div>
                         <div className="mt-1">{sendState.message}</div>
+                        {sendState.hint && <div className="mt-2 rounded-md border border-current/20 bg-black/20 px-2 py-1 text-[10px]">Hint: {sendState.hint}</div>}
                         {sendState.runId && <div className="mt-2 text-[9px] font-mono text-current/80">runId: {sendState.runId}</div>}
                         {sendState.promptId && <div className="mt-1 text-[9px] font-mono text-current/80">promptId: {sendState.promptId}</div>}
                       </div>
@@ -651,12 +776,51 @@ export default function WorkflowStudioView() {
 
                 <div className="rounded-2xl border border-white/5 bg-zinc-950/30 p-4 text-[10px]">
                   <div className="flex items-center justify-between gap-2">
+                    <div className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Authoring Assist</div>
+                    <WandSparkles size={12} className="text-violet-300" />
+                  </div>
+                  <div className="mt-2 text-zinc-500">
+                    Erwartete Template-Token fuer <span className="font-mono text-zinc-300">{selected.id}</span>:
+                  </div>
+                  <div className="mt-2 rounded-lg border border-white/10 bg-zinc-950/70 p-2 max-h-28 overflow-y-auto font-mono text-[9px] text-zinc-300">
+                    {expectedTemplateTokens.map((token) => (
+                      <div key={token}>{`{{${token}}}`}</div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => { void onCopyExpectedTokens(); }}
+                      className="px-2 py-1 rounded-md border border-white/10 bg-zinc-950/60 text-zinc-300 text-[8px] font-black uppercase tracking-wider hover:border-zinc-700 hover:text-white"
+                    >
+                      {copiedAuthoringHint === "tokens" ? "Tokens copied" : "Copy tokens"}
+                    </button>
+                    <button
+                      onClick={() => { void onCopyMetaInputStubs(); }}
+                      className="px-2 py-1 rounded-md border border-white/10 bg-zinc-950/60 text-zinc-300 text-[8px] font-black uppercase tracking-wider hover:border-zinc-700 hover:text-white"
+                    >
+                      {copiedAuthoringHint === "inputs" ? "Inputs copied" : "Copy meta input stubs"}
+                    </button>
+                  </div>
+                  <div className="mt-2 text-[9px] text-zinc-500">
+                    Regel: <span className="font-mono text-zinc-300">meta.inputs[].key</span> als <span className="font-mono text-zinc-300">...AssetId</span>, Template nutzt abgeleitete Token wie <span className="font-mono text-zinc-300">{"{{...AssetAbsPath}}"}</span>.
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/5 bg-zinc-950/30 p-4 text-[10px]">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Recent Runs</div>
                     <div className="text-[9px] text-zinc-600 uppercase tracking-widest">{filteredWorkflowRuns.length}/{selectedWorkflowRuns.length}</div>
                   </div>
 
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => setAutoPlaceImportedOutputs((current) => !current)}
+                        className={`px-2 py-1 rounded-md border text-[8px] font-black uppercase tracking-wider transition-all ${autoPlaceImportedOutputs ? "border-emerald-500/40 bg-emerald-600/15 text-emerald-200" : "border-white/10 bg-zinc-950/60 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"}`}
+                        title="Importierte Outputs automatisch in die Timeline legen"
+                      >
+                        Auto-Place: {autoPlaceImportedOutputs ? "ON" : "OFF"}
+                      </button>
                       {(["all", "queued", "failed", "success"] as RunFilter[]).map((filter) => (
                         <button
                           key={filter}
@@ -700,11 +864,21 @@ export default function WorkflowStudioView() {
                           <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <div className="font-bold text-zinc-200 truncate">{run.message}</div>
+                              {run.status === "failed" && resolveComfyActionHint(run.message) && (
+                                <div className="mt-1 text-[9px] text-amber-300/90 truncate">Hint: {resolveComfyActionHint(run.message)}</div>
+                              )}
                               <div className="mt-1 text-[9px] font-mono text-zinc-500 truncate">{run.id}</div>
                             </div>
-                            <span className={statusBadgeClass(run.status)}>
-                              {run.status}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {isRunStale(run, nowTs) && (
+                                <span className="text-[8px] px-2 py-1 rounded-md border border-amber-400/20 bg-amber-400/10 text-amber-300 uppercase tracking-wider">
+                                  stalled
+                                </span>
+                              )}
+                              <span className={statusBadgeClass(run.status)}>
+                                {run.status}
+                              </span>
+                            </div>
                           </div>
 
                           {(run.progress !== null || run.status === "running") && (
@@ -730,6 +904,14 @@ export default function WorkflowStudioView() {
                               <span className="text-zinc-500">Created:</span>{" "}
                               <span className="font-mono text-zinc-300">{formatShortTimestamp(run.createdAt)}</span>
                             </div>
+                            <div className="rounded-md border border-white/5 bg-zinc-950/50 px-2 py-1">
+                              <span className="text-zinc-500">Updated:</span>{" "}
+                              <span className="font-mono text-zinc-300">{formatShortTimestamp(run.updatedAt)}</span>
+                            </div>
+                            <div className="rounded-md border border-white/5 bg-zinc-950/50 px-2 py-1">
+                              <span className="text-zinc-500">Runtime:</span>{" "}
+                              <span className="font-mono text-zinc-300">{formatRunDuration(run.createdAt, run.updatedAt, nowTs)}</span>
+                            </div>
                           </div>
 
                           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -752,6 +934,17 @@ export default function WorkflowStudioView() {
                               title={run.status === "failed" ? "Retry this failed run" : "Retry available for failed runs"}
                             >
                               <span className="inline-flex items-center gap-1"><RotateCcw size={10} /> {retryingRunId === run.id ? "Retrying..." : "Retry failed run"}</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                void onCancelRun(run);
+                              }}
+                              disabled={(run.status !== "pending" && run.status !== "running") || cancellingRunId === run.id || isProjectBusy}
+                              className="px-2 py-1 rounded-md border border-red-400/20 bg-red-400/10 text-red-200 text-[8px] font-black uppercase tracking-wider disabled:opacity-40"
+                              title={run.status === "pending" || run.status === "running" ? "Cancel active run" : "Cancel only available for active runs"}
+                            >
+                              <span className="inline-flex items-center gap-1"><Square size={10} /> {cancellingRunId === run.id ? "Cancelling..." : "Cancel run"}</span>
                             </button>
                           </div>
 
@@ -826,6 +1019,85 @@ export default function WorkflowStudioView() {
   );
 }
 
+function resolveComfyActionHint(message: string): string | undefined {
+  const m = message.toLowerCase();
+
+  if (m.includes("no project loaded")) {
+    return "Projekt zuerst laden oder neu erstellen.";
+  }
+
+  if (m.includes("missing api template") || m.includes("workflow template missing")) {
+    return "API-Template-Datei pruefen: workflows/<workflowId>.api.json";
+  }
+
+  if (m.includes("unresolved placeholders")) {
+    return "meta.inputs[].key und {{...}} Platzhalter im API-JSON abgleichen.";
+  }
+
+  if (m.includes("asset") && m.includes("not found")) {
+    return "Input-Asset in der Library neu waehlen oder erneut importieren.";
+  }
+
+  if (m.includes("not reachable") || m.includes("econnrefused") || m.includes("fetch failed")) {
+    return "ComfyUI starten und URL/Port in deiner Umgebung pruefen.";
+  }
+
+  if (m.includes("blocked by local-only policy") || m.includes("comfyui_allow_remote")) {
+    return "Remote-Comfy ist geblockt. Optional COMFYUI_ALLOW_REMOTE=1 setzen.";
+  }
+
+  if (m.includes("http 4") || m.includes("http 5") || m.includes("/prompt failed")) {
+    return "ComfyUI-API hat den Prompt abgelehnt. Workflow/API-JSON gegen Comfy export neu pruefen.";
+  }
+
+  return undefined;
+}
+
+function buildExpectedTemplateTokens(inputs: WorkflowMetaInputDefinition[]): string[] {
+  const base = ["workflowId", "width", "height", "fps", "frames", "steps", "projectRoot"];
+  const tokens = new Set<string>(base);
+
+  inputs.forEach((input) => {
+    tokens.add(input.key);
+    if (input.key.endsWith("AssetId")) {
+      const keyBase = input.key.slice(0, -2);
+      tokens.add(`${keyBase}Path`);
+      tokens.add(`${keyBase}AbsPath`);
+      tokens.add(`${keyBase}Name`);
+      tokens.add(`${keyBase}Type`);
+    }
+  });
+
+  return Array.from(tokens).sort((a, b) => a.localeCompare(b));
+}
+
+function isRunStale(run: { status: string; updatedAt: string }, nowTs: number): boolean {
+  if (run.status !== "pending" && run.status !== "running") {
+    return false;
+  }
+
+  const updatedTs = new Date(run.updatedAt).getTime();
+  if (!Number.isFinite(updatedTs)) {
+    return false;
+  }
+
+  return nowTs - updatedTs > 120000;
+}
+
+function formatRunDuration(createdAt: string, updatedAt: string, nowTs: number): string {
+  const startTs = new Date(createdAt).getTime();
+  const updateTs = new Date(updatedAt).getTime();
+  if (!Number.isFinite(startTs)) {
+    return "-";
+  }
+
+  const endTs = Number.isFinite(updateTs) ? Math.max(updateTs, startTs) : nowTs;
+  const totalSec = Math.max(0, Math.floor((endTs - startTs) / 1000));
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${min}m ${String(sec).padStart(2, "0")}s`;
+}
+
 function mergeDraft(w: WorkflowCatalogEntry, d?: Draft): Draft {
   return {
     settings: {
@@ -845,24 +1117,28 @@ function validate(w: WorkflowCatalogEntry, d: Draft, assets: Asset[]): Validatio
   const requestInputs: Record<string, string> = {};
 
   w.inputs.forEach((i) => {
+    if (!i.key.endsWith("AssetId")) {
+      issues.push(`Input-Key "${i.key}" endet nicht auf "AssetId" (Meta-Konvention verletzt).`);
+    }
+
     const value = (d.inputs[i.key] ?? "").trim();
     if (!value) {
-      if (i.required) issues.push(`Select an asset for required input "${i.label}".`);
+      if (i.required) issues.push(`Pflicht-Input "${i.label}" ist leer.`);
       return;
     }
     const asset = assets.find((a) => a.id === value);
     if (!asset) {
-      issues.push(`Selected asset for "${i.label}" no longer exists in project.`);
+      issues.push(`Ausgewaehltes Asset fuer "${i.label}" existiert nicht mehr im Projekt.`);
       return;
     }
     if (asset.type !== i.type) {
-      issues.push(`Input "${i.label}" expects ${i.type}, but selected asset is ${asset.type}.`);
+      issues.push(`Input "${i.label}" erwartet ${i.type}, ausgewaehlt ist aber ${asset.type}.`);
       return;
     }
     requestInputs[i.key] = asset.id;
   });
 
-  if (!w.templateExists) issues.push(`Missing API template: ${w.templateRelativePath}`);
+  if (!w.templateExists) issues.push(`API-Template fehlt: ${w.templateRelativePath}`);
   if (!nums) return { canSend: false, request: null, issues };
 
   const request: GenericComfyWorkflowRunRequest = {

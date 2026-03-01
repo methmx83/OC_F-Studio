@@ -6,6 +6,9 @@ import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
 import type { ProjectResponse, WorkflowPresetsMap, WorkflowPresetsResponse, WorkflowTemplateImportResponse } from '@shared/ipc/project';
 import type { Project } from '@shared/types';
 import type {
+  CancelComfyRunRequest,
+  CancelComfyRunResponse,
+  ComfyHealthRequest,
   ComfyHealthResponse,
   QueueComfyRunRequest,
   QueueComfyRunResponse,
@@ -18,8 +21,9 @@ export interface RegisterIpcHandlers {
   loadProject: () => Promise<ProjectResponse>;
   getProjectRoot: () => string | null;
   listWorkflowCatalog: () => Promise<WorkflowCatalogResponse>;
-  getComfyHealth: () => Promise<ComfyHealthResponse>;
+  getComfyHealth: (request?: ComfyHealthRequest) => Promise<ComfyHealthResponse>;
   queueComfyRun: (payload: QueueComfyRunRequest) => Promise<QueueComfyRunResponse>;
+  cancelComfyRun: (payload: CancelComfyRunRequest) => Promise<CancelComfyRunResponse>;
   importVideo: () => Promise<AssetImportResponse>;
   importImage: () => Promise<AssetImportResponse>;
   importAudio: () => Promise<AssetImportResponse>;
@@ -56,14 +60,21 @@ export function registerIpc(handlers: RegisterIpcHandlers): void {
     return handlers.listWorkflowCatalog();
   });
 
-  ipcMain.handle(IPC_CHANNELS.comfy.health, async (): Promise<ComfyHealthResponse> => {
-    return handlers.getComfyHealth();
+  ipcMain.handle(IPC_CHANNELS.comfy.health, async (_event, request?: ComfyHealthRequest): Promise<ComfyHealthResponse> => {
+    return handlers.getComfyHealth(request);
   });
 
   ipcMain.handle(
     IPC_CHANNELS.comfy.queueRun,
     async (_event, payload: QueueComfyRunRequest): Promise<QueueComfyRunResponse> => {
       return handlers.queueComfyRun(payload);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.comfy.cancelRun,
+    async (_event, payload: CancelComfyRunRequest): Promise<CancelComfyRunResponse> => {
+      return handlers.cancelComfyRun(payload);
     },
   );
 

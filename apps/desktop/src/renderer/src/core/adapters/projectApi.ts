@@ -9,6 +9,9 @@ import type {
 } from '@shared/ipc/project';
 import type { Project } from '@shared/types';
 import type {
+  CancelComfyRunRequest,
+  CancelComfyRunResponse,
+  ComfyHealthRequest,
   ComfyHealthResponse,
   ComfyRunEvent,
   QueueComfyRunRequest,
@@ -35,8 +38,9 @@ export interface ProjectApiPort {
   getFfmpegHealth: () => Promise<FfmpegHealthResponse>;
   ensureVideoProxy: (relativeVideoPath: string) => Promise<ProxyResponse>;
   getAudioWaveformPeaks: (relativeAudioPath: string, bins: number) => Promise<AudioWaveformResponse>;
-  getComfyHealth: () => Promise<ComfyHealthResponse>;
+  getComfyHealth: (request?: ComfyHealthRequest) => Promise<ComfyHealthResponse>;
   queueComfyRun: (payload: QueueComfyRunRequest) => Promise<QueueComfyRunResponse>;
+  cancelComfyRun: (payload: CancelComfyRunRequest) => Promise<CancelComfyRunResponse>;
   onComfyRunEvent: (listener: (event: ComfyRunEvent) => void) => () => void;
 }
 

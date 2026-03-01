@@ -11,6 +11,9 @@ import type {
 } from '@shared/ipc/project';
 import type { Asset, Project } from '@shared/types';
 import type {
+  CancelComfyRunRequest,
+  CancelComfyRunResponse,
+  ComfyHealthRequest,
   ComfyHealthResponse,
   ComfyRunEvent,
   QueueComfyRunRequest,
@@ -73,11 +76,14 @@ contextBridge.exposeInMainWorld('projectApi', {
   getAudioWaveformPeaks: async (relativeAudioPath: string, bins: number): Promise<AudioWaveformResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.audioWaveformPeaks, relativeAudioPath, bins) as Promise<AudioWaveformResponse>;
   },
-  getComfyHealth: async (): Promise<ComfyHealthResponse> => {
-    return ipcRenderer.invoke(IPC_CHANNELS.comfy.health) as Promise<ComfyHealthResponse>;
+  getComfyHealth: async (request?: ComfyHealthRequest): Promise<ComfyHealthResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.comfy.health, request) as Promise<ComfyHealthResponse>;
   },
   queueComfyRun: async (payload: QueueComfyRunRequest): Promise<QueueComfyRunResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.comfy.queueRun, payload) as Promise<QueueComfyRunResponse>;
+  },
+  cancelComfyRun: async (payload: CancelComfyRunRequest): Promise<CancelComfyRunResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.comfy.cancelRun, payload) as Promise<CancelComfyRunResponse>;
   },
   onComfyRunEvent: (listener: (event: ComfyRunEvent) => void): (() => void) => {
     const channelListener = (...args: [IpcRendererEvent, ComfyRunEvent]) => {

@@ -210,11 +210,13 @@ export function createWorkflowStudioSlice(
       }
 
       const runId = deps.createId('wf_run');
+      const now = new Date().toISOString();
       const queuedRun: StudioState['queuedWorkflowRuns'][number] = {
         id: runId,
         workflowId: selected.id,
         workflowName: selected.name,
-        createdAt: new Date().toISOString(),
+        createdAt: now,
+        updatedAt: now,
         status: 'pending',
         promptId: null,
         progress: 0,
@@ -231,9 +233,11 @@ export function createWorkflowStudioSlice(
 
       try {
         const ipc = getIpcClient();
+        const baseUrlOverride = state.comfyBaseUrl.trim();
         const response = await ipc.queueComfyRun({
           runId,
           request,
+          baseUrlOverride: baseUrlOverride.length > 0 ? baseUrlOverride : undefined,
         });
 
         if (!response.success) {

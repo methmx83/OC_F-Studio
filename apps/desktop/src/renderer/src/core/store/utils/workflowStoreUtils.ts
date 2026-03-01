@@ -63,6 +63,7 @@ export function applyComfyRunEventState(state: StudioState, event: ComfyRunEvent
     progress: event.progress,
     message: event.message,
     outputPaths: event.outputPaths.length > 0 ? event.outputPaths : existing.outputPaths,
+    updatedAt: event.occurredAt,
   };
 
   const nextRuns = [...state.queuedWorkflowRuns];

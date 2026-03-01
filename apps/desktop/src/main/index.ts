@@ -14,6 +14,9 @@ import type {
 } from '@shared/ipc/project';
 import type { Asset, Project } from '@shared/types';
 import type {
+  CancelComfyRunRequest,
+  CancelComfyRunResponse,
+  ComfyHealthRequest,
   ComfyHealthResponse,
   ComfyRunEvent,
   QueueComfyRunRequest,
@@ -767,11 +770,14 @@ registerIpc({
   listWorkflowCatalog: async (): Promise<WorkflowCatalogResponse> => {
     return workflowCatalogService.listCatalog();
   },
-  getComfyHealth: async (): Promise<ComfyHealthResponse> => {
-    return comfyService.getComfyHealth();
+  getComfyHealth: async (request?: ComfyHealthRequest): Promise<ComfyHealthResponse> => {
+    return comfyService.getComfyHealth(request);
   },
   queueComfyRun: async (payload: QueueComfyRunRequest): Promise<QueueComfyRunResponse> => {
     return comfyService.queueComfyRun(payload);
+  },
+  cancelComfyRun: async (payload: CancelComfyRunRequest): Promise<CancelComfyRunResponse> => {
+    return comfyService.cancelComfyRun(payload);
   },
   importVideo: async (): Promise<AssetImportResponse> => {
     return importAssetFile('video');

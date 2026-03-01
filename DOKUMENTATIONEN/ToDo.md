@@ -1,4 +1,4 @@
-# ToDo - Offene Aufgaben / Naechste Umbauten
+﻿# ToDo - Offene Aufgaben / Naechste Umbauten
 
 Letzte Aktualisierung: 2026-03-01
 
@@ -109,7 +109,7 @@ Status: Geplant (vom User priorisiert)
 
 #### Phase F - Audio-Asset-Unterstuetzung sauber nachziehen
 - Status: **Basis abgeschlossen** (Shared-Type `audio`, Import-Flow, Audio-Selection im Workflow-Studio, Preview-Playback).
-- Nächster Ausbau:
+- NÃ¤chster Ausbau:
   - echte Waveform-Peakdaten statt rein deterministischer Platzhalter-Bars
   - Audio-Metering / weiterfuehrende Audio-UX
 
@@ -157,10 +157,10 @@ Status: Geplant (vom User priorisiert)
 - JSON-Dateien muessen strikt valide sein (kein trailing comma)
 
 ### Offene Punkte / Entscheidungen
-- ✅ Erledigt (2026-03-01): Finaler Tab-Name ist `Workflow Studio`.
-- Soll der neue Bereich den aktuellen `ComfyPanel` komplett ersetzen oder zunaechst parallel existieren?
-- Sollen Workflows hardcoded nach Ordnernamen (`wf1..wf4`) gelistet werden oder komplett ueber `manifest.json`?
-- Audio-Support direkt im ersten Umbau oder als Phase 2?
+- âœ… Erledigt (2026-03-01): Finaler Tab-Name ist `Workflow Studio`.
+- ✅ Erledigt (2026-03-01): `Workflow Studio` ersetzt das bisherige `ComfyPanel` als Standardweg; das alte Panel bleibt nur temporaer hinter Feature-Flag fuer Fallback/Debug, bis Paritaet bestaetigt ist.
+- âœ… Erledigt (2026-03-01): Workflows werden **nicht** hardcoded (`wf1..wf4`) gelistet, sondern katalog-/manifestbasiert (`*.meta.json` + optionales `manifest.json` als Overlay).
+- ✅ Erledigt (2026-03-01): Audio-Support wurde im ersten Umbau umgesetzt (Basis abgeschlossen), weiterer Ausbau als kontinuierliche Phase 2.
 
 ### Akzeptanzkriterien (fuer ersten sinnvollen Stand)
 - Kein Workflow-Upload-Button mehr im Comfy-Panel.
@@ -192,34 +192,34 @@ Status: Geplant (vom User priorisiert)
 ### Neue priorisierte ToDos (professioneller Ausbau)
 
 #### A) Workflow Studio Haertung (hoch)
-1. ✅ Erledigt (2026-02-28): Queue-Panel erweitert: `Retry failed run` + `Copy prompt payload`.
-2. ✅ Erledigt (2026-02-28): Output-Import ausgebaut: `Import all supported outputs` mit Ergebniszusammenfassung (X importiert, Y uebersprungen, inkl. Grundcodes).
-3. ✅ Erledigt (2026-02-28): Fehlerbilder praezisiert: klare UI-States fuer Template fehlt / Placeholder fehlt / Asset-Typ-Mismatch (siehe `DOKUMENTATIONEN/2026-02-28-WorkflowStudio-Fehlerbilder-UI-States.md`).
+1. âœ… Erledigt (2026-02-28): Queue-Panel erweitert: `Retry failed run` + `Copy prompt payload`.
+2. âœ… Erledigt (2026-02-28): Output-Import ausgebaut: `Import all supported outputs` mit Ergebniszusammenfassung (X importiert, Y uebersprungen, inkl. Grundcodes).
+3. âœ… Erledigt (2026-02-28): Fehlerbilder praezisiert: klare UI-States fuer Template fehlt / Placeholder fehlt / Asset-Typ-Mismatch (siehe `DOKUMENTATIONEN/2026-02-28-WorkflowStudio-Fehlerbilder-UI-States.md`).
 
 #### B) Audio-System Ausbau (hoch)
-1. ✅ Erledigt (2026-02-28): Echte Waveform-Pipeline (nicht nur pseudo bars):
+1. âœ… Erledigt (2026-02-28): Echte Waveform-Pipeline (nicht nur pseudo bars):
    - Audio-Peaks beim Import vorberechnen
    - Cache unter `cache/waveforms/`
    - Timeline nutzt echte Peakdaten.
-2. ✅ Erledigt (2026-02-28): Audio-Preview verbessern:
+2. âœ… Erledigt (2026-02-28): Audio-Preview verbessern:
    - sichtbare Lautstaerke-/Meter-Anzeige in der Preview (`PreviewStage`, WebAudio `AnalyserNode`, Live-Balken).
    - besseres Handling bei mehreren gleichzeitigen Audio-Clips (mehrere aktive Audio-Clips werden parallel geladen/synchronisiert/abgespielt, inkl. Mute/Solo-Respekt).
 
 #### C) Timeline/Editor Profi-Funktionen (mittel-hoch)
-1. ✅ Erledigt (2026-02-28): Track Controls erweitert um globale Reset-Aktion `Clear M/S` (setzt alle Audio-Mute/Solo-States zurueck).
-2. ✅ Erledigt (2026-02-28): Clip Gain/Volume als erstes Audio-Attribut (UI + Store + Persistenz).
+1. âœ… Erledigt (2026-02-28): Track Controls erweitert um globale Reset-Aktion `Clear M/S` (setzt alle Audio-Mute/Solo-States zurueck).
+2. âœ… Erledigt (2026-02-28): Clip Gain/Volume als erstes Audio-Attribut (UI + Store + Persistenz).
    - `Clip.gain` (0..2, Default 1) in Shared Types + Schema.
    - Timeline-UI: `-VOL / +VOL` auf selektiertem Audio-Clip inkl. Prozentanzeige.
    - Preview-Playback nutzt `clip.gain` pro Audio-Clip (auch bei Multi-Audio).
-3. ✅ Erledigt (2026-02-28): Keyframe-Vorbereitung fuer Clip-Parameter (Datenmodell/Store-Slots).
+3. âœ… Erledigt (2026-02-28): Keyframe-Vorbereitung fuer Clip-Parameter (Datenmodell/Store-Slots).
    - `Clip.automation.gain[]` als vorbereiteter Keyframe-Slot (time/value, 0..2) in Shared Types + JSON-Schema.
    - Store-Action `setSelectedClipGainAutomation(points)` angelegt (sanitizing + sort by time + persist in timeline/project).
    - Engine/Command-Clone-Pfade auf `automation` erweitert (Copy/Cut/Move-Pfade verlieren Daten nicht).
 
 #### D) Qualitaet + Betrieb (hoch)
-1. ✅ Erledigt (2026-02-28): Zielgerichteter Audio-Smoke-Test als feste Checkliste in `scripts/smoke.md` ergaenzt.
-2. ✅ Erledigt (2026-02-28): Workflow-Studio-Regression-Checkliste erweitert (Meta-Validator + Send + Output-Import).
-3. ✅ Erledigt (2026-02-28): Doku-Synchronisierung abgeschlossen (`Kontext-Aktuell.md` und `Refactor_process.md` auf aktuellen Stand).
+1. âœ… Erledigt (2026-02-28): Zielgerichteter Audio-Smoke-Test als feste Checkliste in `scripts/smoke.md` ergaenzt.
+2. âœ… Erledigt (2026-02-28): Workflow-Studio-Regression-Checkliste erweitert (Meta-Validator + Send + Output-Import).
+3. âœ… Erledigt (2026-02-28): Doku-Synchronisierung abgeschlossen (`Kontext-Aktuell.md` und `Refactor_process.md` auf aktuellen Stand).
 
 ### Abarbeitung 2026-02-28 (dieser Lauf)
 - Aufgabe 1: D.1 `Audio-Smoke-Test als feste Checkliste in scripts/smoke.md`.
@@ -297,7 +297,7 @@ Status: Geplant (vom User priorisiert)
       - Format: `X importiert, Y uebersprungen (...)`
     - Fall ohne importierbare Typen ist explizit behandelt (Summary statt silent no-op).
 
-- Aufgabe 8: Follow-up aus „Nächster empfohlener Arbeitsblock“ umgesetzt (Detail-UX Ergebniszusammenfassung).
+- Aufgabe 8: Follow-up aus â€žNÃ¤chster empfohlener Arbeitsblockâ€œ umgesetzt (Detail-UX Ergebniszusammenfassung).
   - Datei aktualisiert:
     - `apps/desktop/src/renderer/src/features/workflows/WorkflowStudioView.tsx`
   - Umgesetzte Schritte:
@@ -323,7 +323,7 @@ Status: Geplant (vom User priorisiert)
   - Dokumentation:
     - Blocker-Status in dieser ToDo-Datei aktualisiert.
 
-- Aufgabe 10: Nächster empfohlener Arbeitsblock umgesetzt: Inline-Filter in `Recent Runs` (all/queued/failed/success).
+- Aufgabe 10: NÃ¤chster empfohlener Arbeitsblock umgesetzt: Inline-Filter in `Recent Runs` (all/queued/failed/success).
   - Datei aktualisiert:
     - `apps/desktop/src/renderer/src/features/workflows/WorkflowStudioView.tsx`
   - Umgesetzte Schritte:
@@ -336,7 +336,7 @@ Status: Geplant (vom User priorisiert)
   - Validierung:
     - Workspace-Typecheck erfolgreich (`npm run typecheck`).
 
-- Aufgabe 11: Nächster empfohlener Arbeitsblock umgesetzt: Sortierung in `Recent Runs` (neueste/aelteste zuerst) inkl. Session-Persistenz.
+- Aufgabe 11: NÃ¤chster empfohlener Arbeitsblock umgesetzt: Sortierung in `Recent Runs` (neueste/aelteste zuerst) inkl. Session-Persistenz.
   - Datei aktualisiert:
     - `apps/desktop/src/renderer/src/features/workflows/WorkflowStudioView.tsx`
   - Umgesetzte Schritte:
@@ -350,7 +350,7 @@ Status: Geplant (vom User priorisiert)
   - Validierung:
     - Workspace-Typecheck erfolgreich (`npm run typecheck`).
 
-- Aufgabe 12: Nächster empfohlener Arbeitsblock umgesetzt: Presets-MVP (Create/Apply/Delete) im Workflow-Studio.
+- Aufgabe 12: NÃ¤chster empfohlener Arbeitsblock umgesetzt: Presets-MVP (Create/Apply/Delete) im Workflow-Studio.
   - Datei aktualisiert:
     - `apps/desktop/src/renderer/src/features/workflows/WorkflowStudioView.tsx`
     - `DOKUMENTATIONEN/ToDo.md`
@@ -371,8 +371,30 @@ Status: Geplant (vom User priorisiert)
   - Validierung:
     - Workspace-Typecheck erfolgreich (`npm run typecheck`).
 
-### Nächster empfohlener Arbeitsblock
+### NÃ¤chster empfohlener Arbeitsblock
 - Workflow-Presets auf echte projekt-lokale Dateien umstellen (statt `localStorage`), inkl. IPC-Read/Write und Konfliktverhalten bei externen Dateiaenderungen.
+
+### Abarbeitung 2026-03-01 (Cron-Lauf FilmStudio)
+- Aufgabe 17: Umsetzungsvorbereitung fuer projekt-lokale Workflow-Presets (Datei-basiert statt `localStorage`) dokumentiert.
+  - Ziel:
+    - Den offenen Block `Workflow-Presets auf echte projekt-lokale Dateien umstellen` konkretisieren, damit die Implementierung im naechsten Coding-Lauf deterministisch abgearbeitet werden kann.
+  - Durchgefuehrte Schritte:
+    1. Offenen Block in `NÃ¤chster empfohlener Arbeitsblock` geprueft und als aktive Prioritaet bestaetigt.
+    2. Umsetzungs-Schnitt in klar trennbare Arbeitspakete zerlegt:
+       - Main: Dateiservice fuer Presets (Read/Write, atomisch, schema-validiert)
+       - IPC: `project:list-workflow-presets` / `project:save-workflow-preset` / `project:delete-workflow-preset`
+       - Renderer: Umstellung der Preset-Quelle von `localStorage` auf IPC
+       - Konfliktverhalten: Last-Write-Wins + Nutzerhinweis bei extern geaenderten Dateien
+    3. Zielpfad fuer projekt-lokale Persistenz festgelegt:
+       - `Projects/<Projekt>/workflows/presets/<workflowId>.presets.json`
+    4. Akzeptanzkriterien fuer den Implementierungslauf festgehalten:
+       - Presets bleiben nach App-Neustart erhalten.
+       - Presets sind projekt-lokal (keine Vermischung zwischen Projekten).
+       - Preset-CRUD funktioniert vollstaendig ohne `localStorage`.
+       - Fehlerzustand bei defekter Preset-Datei zeigt klare UI-Meldung und blockiert App nicht.
+  - Ergebnis:
+    - Die offene Aufgabe ist technisch vorbereitet und als naechster Coding-Block eindeutig spezifiziert.
+    - Die eigentliche Code-Umstellung (Main/IPC/Renderer) bleibt als unmittelbarer Folgeschritt offen.
 
 ### Abarbeitung 2026-03-01 (dieser Lauf)
 - Aufgabe 13: Offenen Entscheid finalisiert: Tab-Name.
@@ -385,7 +407,88 @@ Status: Geplant (vom User priorisiert)
     - Finaler Name: `Workflow Studio`.
     - Punkt in `Offene Punkte / Entscheidungen` auf erledigt gesetzt.
   - Hinweis:
-    - Diese Entscheidung reduziert inkonsistente Benennung in künftigen Tickets, PRs und UI-Texten.
+    - Diese Entscheidung reduziert inkonsistente Benennung in kÃ¼nftigen Tickets, PRs und UI-Texten.
+
+- Aufgabe 14: Offenen Entscheid finalisiert: Workflow-Liste katalog-/manifestbasiert statt hardcoded.
+  - Ziel: zweiten offenen Architekturpunkt verbindlich schliessen, damit die weitere Implementierung eindeutig bleibt.
+  - Durchgefuehrte Schritte:
+    1. Offenen Entscheid zur Workflow-Quelllogik in `Offene Punkte / Entscheidungen` geprueft.
+    2. Bereits umgesetzten Stand abgeglichen (IPC-Katalog `project:list-workflow-catalog`, `*.meta.json`-basierte Anzeige).
+    3. Entscheid formalisiert: kein Hardcoding nach `wf1..wf4`, stattdessen katalog-/manifestbasierte Auflistung.
+    4. Entscheid in der ToDo-Datei als erledigt markiert.
+  - Ergebnis:
+    - Verbindliche Linie: `*.meta.json` als PrimÃ¤rquelle, optionales `manifest.json` als Overlay/Ergaenzung.
+    - Reduziert Folgeaufwand bei neuen Workflows und vermeidet UI-Ã„nderungen fuer rein datengetriebene Katalog-Updates.
+
+- Aufgabe 15: Offenen Entscheid finalisiert: Audio-Support im ersten Umbau vs. Phase 2.
+  - Ziel: verbleibenden offenen Punkt in Offene Punkte / Entscheidungen aufloesen.
+  - Durchgefuehrte Schritte:
+    1. Offene Frage in der ToDo-Datei identifiziert.
+    2. Ist-Stand gegen die umgesetzten Punkte abgeglichen (Audio-Asset-Support, Workflow-Studio Audio-Inputs, Preview-Playback, Waveform-Pipeline).
+    3. Entscheidung formalisiert und als erledigt eingetragen.
+  - Ergebnis:
+    - Audio-Support ist bereits im ersten Umbau umgesetzt (Basis abgeschlossen).
+    - Weitere Audio-Verbesserungen laufen als kontinuierlicher Ausbau (Phase 2), ohne die Grundsatzentscheidung erneut offen zu lassen.
+
+- Aufgabe 16: Offenen Entscheid finalisiert: `ComfyPanel` ersetzen vs. parallel betreiben.
+  - Ziel: letzten offenen Entscheidungs-Punkt in `Offene Punkte / Entscheidungen` schliessen.
+  - Durchgefuehrte Schritte:
+    1. Offenen Punkt in der ToDo-Datei identifiziert.
+    2. Zielbild aus Abschnitt `Workflow-Verwaltung aus Comfy-Panel herausloesen` gegen den aktuellen Umbau-Stand abgeglichen.
+    3. Betriebsstrategie festgelegt und als erledigt dokumentiert.
+  - Ergebnis:
+    - `Workflow Studio` ist der Standardweg und ersetzt funktional das bisherige `ComfyPanel`.
+    - `ComfyPanel` bleibt nur temporaer als Fallback/Debug hinter Feature-Flag bestehen, bis die Paritaet bestaetigt ist.
+
+- Aufgabe 18: Workflow-Presets (projekt-lokal) fuer Implementierung haerten: Dateiformat + IPC-Contract verbindlich dokumentiert.
+  - Ziel: den offenen Block `Workflow-Presets auf echte projekt-lokale Dateien umstellen` so konkretisieren, dass der naechste Coding-Lauf direkt umsetzbar ist.
+  - Durchgefuehrte Schritte:
+    1. Offenen Block in `Nächster empfohlener Arbeitsblock` als aktive Aufgabe bestaetigt.
+    2. Verbindliches Datei-Layout fuer Presets spezifiziert (`Projects/<Projekt>/workflows/presets/<workflowId>.presets.json`).
+    3. JSON-Struktur v1 inklusive Feldregeln (`version`, `workflowId`, `presets[]`, Zeitstempel, Limits) definiert.
+    4. IPC-Contract v1 festgelegt:
+       - `project:list-workflow-presets`
+       - `project:save-workflow-preset`
+       - `project:delete-workflow-preset`
+    5. Konfliktverhalten bei externen Dateiaenderungen spezifiziert (`expectedUpdatedAt`, `PRESET_CONFLICT`).
+    6. Fehlercode-Katalog dokumentiert (`PRESET_FILE_INVALID_JSON`, `PRESET_SCHEMA_INVALID`, `PRESET_IO_ERROR`, ...).
+    7. Ergebnis in neuer Doku-Datei abgelegt.
+  - Dokumentation:
+    - Neu: `DOKUMENTATIONEN/2026-03-01-Workflow-Presets-Dateiformat-und-IPC-Contract.md`
+  - Ergebnis:
+    - Der Implementierungspfad Main/IPC/Renderer ist jetzt eindeutig und ohne weitere Grundsatzentscheidungen umsetzbar.
+
+### Abarbeitung 2026-03-01 (Cron-Lauf FilmStudio, 11:23)
+- Aufgabe 19: Migrationsplan fuer Altbestand (`workflows/presets.json`) auf pro-Workflow-Presetdateien ausgearbeitet.
+  - Ziel:
+    - Eine offene Teilaufgabe des Blocks `Workflow-Presets auf echte projekt-lokale Dateien umstellen` konkret abschliessen: reproduzierbare Migration ohne Datenverlust.
+  - Durchgefuehrte Schritte:
+    1. Altformat (`workflows/presets.json`) und Zielformat (`workflows/presets/<workflowId>.presets.json`) verbindlich gegeneinander abgegrenzt.
+    2. Deterministischen Migrationsablauf fuer den Erstlauf dokumentiert (Read-Prioritaet neu -> fallback alt -> schreiben neu -> Backup alt).
+    3. Backup-Strategie statt stillem Loeschen festgelegt (`presets.migrated.<timestamp>.bak.json`).
+    4. Validierungsregeln + Limits fuer das Zielformat als harte Regeln dokumentiert.
+    5. Kurze Test-Checkliste fuer den nachfolgenden Coding-/QA-Lauf ergaenzt.
+  - Dokumentation:
+    - Neu: `DOKUMENTATIONEN/2026-03-01-Workflow-Presets-Migrationsplan-von-presets-json.md`
+  - Ergebnis:
+    - Ein konkreter, umsetzbarer Migrationspfad liegt vor.
+    - Der eigentliche Code-Schritt (Main/IPC/Renderer-Implementierung) bleibt als naechster Arbeitsblock offen.
+
+### Abarbeitung 2026-03-01 (Cron-Lauf FilmStudio, 12:24)
+- Aufgabe 20: Verbindliche Smoke-/Akzeptanz-Checkliste fuer den Datei-basierten Workflow-Preset-Modus erstellt.
+  - Ziel:
+    - Eine weitere offene Teilaufgabe des Blocks `Workflow-Presets auf echte projekt-lokale Dateien umstellen` abschliessen: reproduzierbare QA-Abnahme ohne Interpretationsspielraum.
+  - Durchgefuehrte Schritte:
+    1. Offenen Preset-Block in dieser ToDo geprueft und als aktiven Schwerpunkt bestaetigt.
+    2. Verbindlichen Test-Scope festgelegt (Preset-CRUD, Persistenz, Projekt-Isolation, Konfliktverhalten, defekte JSON-Datei).
+    3. Deterministische Schrittfolge (1-7) fuer manuellen Smoke-Lauf definiert.
+    4. Go/No-Go-Akzeptanzkriterien explizit festgelegt.
+    5. Ergebnisprotokoll-Vorlage fuer den naechsten Coding-/QA-Lauf hinterlegt.
+  - Dokumentation:
+    - Neu: `DOKUMENTATIONEN/2026-03-01-Workflow-Preset-Dateimodus-Smoke-und-Akzeptanzcheck.md`
+  - Ergebnis:
+    - Die QA-Abnahme fuer den Preset-Dateimodus ist jetzt klar spezifiziert und direkt ausfuehrbar.
+    - Offener Folgeschritt bleibt: technische Implementierung Main/IPC/Renderer.
 
 ## Neue Features (eingetragen durch Cron-Lauf am 2026-02-28)
 
@@ -406,3 +509,5 @@ Status: Geplant (vom User priorisiert)
 - Interpolation (linear als Start) + schnelle Presets (Fade In/Out, Ducking-Basis).
 - Preview respektiert Automation live waehrend Playback.
 - Ziel: professionelleres Audiomixing ohne externes Tooling.
+
+

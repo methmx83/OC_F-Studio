@@ -58,6 +58,7 @@ export interface QueuedWorkflowRun {
   workflowId: string;
   workflowName: string;
   createdAt: string;
+  updatedAt: string;
   status: 'pending' | 'running' | 'success' | 'failed';
   promptId: string | null;
   progress: number | null;
@@ -84,6 +85,7 @@ export interface StudioState {
   isProjectBusy: boolean;
   isDirty: boolean;
   comfyOnline: boolean;
+  comfyBaseUrl: string;
   lastError: string | null;
   pastCount: number;
   futureCount: number;
@@ -111,6 +113,7 @@ export interface StudioState {
   setAssetFilter: (filter: AssetFilter) => void;
   setAssetQuery: (query: string) => void;
   clearLastError: () => void;
+  setComfyBaseUrl: (url: string) => void;
   checkComfyHealth: () => Promise<void>;
   bindComfyRunEvents: () => void;
   checkFfmpegHealth: () => Promise<void>;

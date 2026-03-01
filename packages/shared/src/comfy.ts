@@ -33,9 +33,14 @@ export type ComfyWorkflowRunRequest =
   | KnownComfyWorkflowRunRequest
   | GenericComfyWorkflowRunRequest;
 
+export interface ComfyHealthRequest {
+  baseUrlOverride?: string;
+}
+
 export interface QueueComfyRunRequest {
   runId: string;
   request: ComfyWorkflowRunRequest;
+  baseUrlOverride?: string;
 }
 
 export interface QueueComfyRunResponse {
@@ -43,6 +48,18 @@ export interface QueueComfyRunResponse {
   message: string;
   runId: string;
   promptId?: string;
+}
+
+export interface CancelComfyRunRequest {
+  runId: string;
+  promptId?: string;
+  baseUrlOverride?: string;
+}
+
+export interface CancelComfyRunResponse {
+  success: boolean;
+  message: string;
+  runId: string;
 }
 
 export interface ComfyHealthResponse {
