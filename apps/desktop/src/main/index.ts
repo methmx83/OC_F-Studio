@@ -686,10 +686,10 @@ const comfyService = createComfyService({
 
 function resolveGlobalWorkflowsRoot(): string {
   const candidates = [
-    path.resolve(process.cwd(), 'workflows'),
     path.resolve(app.getAppPath(), '../../workflows'),
     path.resolve(app.getAppPath(), '../workflows'),
     path.resolve(app.getAppPath(), 'workflows'),
+    path.resolve(process.cwd(), 'workflows'),
   ];
 
   const existing = candidates.find((candidate) => existsSync(candidate));
