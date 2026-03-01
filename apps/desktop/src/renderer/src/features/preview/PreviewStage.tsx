@@ -333,8 +333,15 @@ export default function PreviewStage() {
         }
       }
 
-      const safeGain = Number.isFinite(activeItem.gain) ? activeItem.gain : 1;
-      audio.volume = Math.max(0, Math.min(1, safeGain));
+      const rawGain = Number(activeItem.gain);
+      const safeGain = Number.isFinite(rawGain) ? rawGain : 1;
+      const clampedVolume = Math.max(0, Math.min(1, safeGain));
+      try {
+        audio.volume = clampedVolume;
+      } catch {
+        // Fallback for strict HTMLMediaElement implementations
+        audio.volume = 1;
+      }
 
       if (isPlaying) {
         if (audio.paused) {
