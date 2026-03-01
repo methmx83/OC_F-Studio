@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, dialog } from 'electron';
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -683,9 +684,21 @@ const comfyService = createComfyService({
   emitRunEvent: emitComfyRunEvent,
 });
 
+function resolveGlobalWorkflowsRoot(): string {
+  const candidates = [
+    path.resolve(process.cwd(), 'workflows'),
+    path.resolve(app.getAppPath(), '../../workflows'),
+    path.resolve(app.getAppPath(), '../workflows'),
+    path.resolve(app.getAppPath(), 'workflows'),
+  ];
+
+  const existing = candidates.find((candidate) => existsSync(candidate));
+  return existing ?? candidates[0];
+}
+
 const workflowCatalogService = createWorkflowCatalogService({
   getCurrentProjectRoot: () => currentProjectRoot,
-  getGlobalWorkflowsRoot: () => path.resolve(app.getAppPath(), '../../workflows'),
+  getGlobalWorkflowsRoot: () => resolveGlobalWorkflowsRoot(),
   resolveProjectPath,
 });
 
