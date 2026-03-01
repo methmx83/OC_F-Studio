@@ -1,0 +1,22 @@
+{
+  "id": "Wan_I2V",
+  "name": "WAN Animate I2V",
+  "category": "videos",
+  "templateFile": "Wan_Animate_I2V.api.json",
+  "inputs": [
+    {
+      "key": "refIMGAssetId",
+      "type": "image",
+      "label": "Reference Image",
+      "required": true
+    }
+    
+  ],
+  "defaults": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "frames": 81,
+    "steps": 6
+  }
+}

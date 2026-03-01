@@ -1,0 +1,21 @@
+{
+  "id": "VACE",
+  "name": "Clip Joiner",
+  "category": "videos",
+  "templateFile": "VACE Clip Joiner.api.json",
+  "inputs": [
+    {
+      "key": "pathAssetId",
+      "type": "Path",
+      "label": "Input Path",
+      "required": true
+    }
+  ],
+  "defaults": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "frames": 81,
+    "steps": 6
+  }
+}

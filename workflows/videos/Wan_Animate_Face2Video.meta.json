@@ -1,0 +1,27 @@
+{
+  "id": "Wan_F2V",
+  "name": "WAN Face2Video",
+  "category": "videos",
+  "templateFile": "Wan_Animate_Face2Video.api.json",
+  "inputs": [
+    {
+      "key": "refIMGAssetId",
+      "type": "image",
+      "label": "Reference Image",
+      "required": true
+    },
+     {
+      "key": "PoseVidAssetId",
+      "type": "video",
+      "label": "Pose Video",
+      "required": true
+    }
+  ],
+  "defaults": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "frames": 81,
+    "steps": 6
+  }
+}

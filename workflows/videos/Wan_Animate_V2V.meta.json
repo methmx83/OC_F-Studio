@@ -1,0 +1,33 @@
+{
+  "id": "Wan_IV2V",
+  "name": "WAN Animate I+V2V",
+  "category": "videos",
+  "templateFile": "Wan_Animate_V2V.api.json",
+  "inputs": [
+    {
+      "key": "refIMGAssetId",
+      "type": "image",
+      "label": "Reference Image",
+      "required": true
+    },
+    {
+      "key": "faceVidAssetId",
+      "type": "video",
+      "label": "Face Video",
+      "required": true
+    },
+    {
+      "key": "PoseVidAssetId",
+      "type": "video",
+      "label": "Pose Video",
+      "required": true
+    }
+  ],
+  "defaults": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "frames": 81,
+    "steps": 6
+  }
+}
