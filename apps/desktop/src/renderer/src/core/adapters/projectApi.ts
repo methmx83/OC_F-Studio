@@ -45,5 +45,5 @@ export interface ProjectApiPort {
 }
 
 export function getProjectApi(): ProjectApiPort {
-  return (globalThis.window as Window & { projectApi: ProjectApiPort }).projectApi;
+  return (globalThis.window as unknown as { projectApi: ProjectApiPort }).projectApi;
 }
