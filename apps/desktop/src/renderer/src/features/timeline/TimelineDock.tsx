@@ -591,7 +591,12 @@ export default function TimelineDock() {
                 </div>
                 <button
                   disabled={selectedAudioClipGain >= 1}
-                  onClick={() => setSelectedClipGain(Math.min(1, selectedAudioClipGain + 0.1))}
+                  onClick={() => {
+                    if (!Number.isFinite(selectedAudioClipGain) || selectedAudioClipGain >= 1) {
+                      return;
+                    }
+                    setSelectedClipGain(Math.min(1, selectedAudioClipGain + 0.1));
+                  }}
                   className="px-2 py-1 rounded-lg bg-zinc-900/40 border border-white/5 text-[10px] font-black tracking-wider text-violet-300 hover:text-violet-200 disabled:opacity-40 transition-all"
                   title="Audio Gain +0.1"
                 >

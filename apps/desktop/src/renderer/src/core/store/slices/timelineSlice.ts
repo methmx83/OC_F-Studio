@@ -464,6 +464,10 @@ export function createTimelineSlice(
           return state;
         }
 
+        if (!Number.isFinite(gain)) {
+          return { lastError: 'Invalid audio gain value.' };
+        }
+
         try {
           const trackIndex = state.timeline.tracks.findIndex((track) => track.id === selected.trackId);
           if (trackIndex < 0) {
