@@ -5,6 +5,11 @@
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
+    "clean:emitted-js": "node ./scripts/clean-emitted-js.mjs",
+    "predev": "npm run clean:emitted-js",
+    "pretypecheck": "npm run clean:emitted-js",
+    "prebuild": "npm run clean:emitted-js",
+    "prelint": "npm run clean:emitted-js",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "preview": "electron-vite preview",
