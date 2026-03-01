@@ -330,7 +330,7 @@ export default function WorkflowStudioView() {
     const preset = workflowPresets.find((p) => p.id === selectedPresetId);
     if (!preset) return;
     setDrafts((prev) => ({ ...prev, [selected.id]: mergeDraft(selected, preset.draft) }));
-    setSendState({ status: "success", message: `Preset \"${preset.name}\" angewendet.` });
+    setSendState({ status: "success", message: `Preset "${preset.name}" angewendet.` });
   }
 
   function onDeletePreset(): void {
@@ -435,7 +435,7 @@ export default function WorkflowStudioView() {
           } else {
             addReason("NO_CHANGE_OR_REJECTED", outputPath);
           }
-        } catch (_e) {
+        } catch {
           addReason("IMPORT_EXCEPTION", outputPath);
         }
       }
