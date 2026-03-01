@@ -1,0 +1,14 @@
+{
+  "id": "seedvr_upscaler",
+  "name": "SeedVR - Upscaler",
+  "category": "images",
+  "templateFile": "seedvr_upscaler.api.json",
+  "inputs": [],
+  "defaults": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 24,
+    "frames": 1,
+    "steps": 20
+  }
+}

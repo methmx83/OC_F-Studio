@@ -1,0 +1,14 @@
+{
+  "id": "wan_animate_face2v",
+  "name": "WAN Animate Face2V",
+  "category": "videos",
+  "templateFile": "wan_animate_face2v.api.json",
+  "inputs": [],
+  "defaults": {
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "frames": 120,
+    "steps": 20
+  }
+}

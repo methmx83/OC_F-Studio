@@ -1,0 +1,14 @@
+{
+  "id": "wan_animate_i_plus_v2v",
+  "name": "WAN Animate I+V2V",
+  "category": "videos",
+  "templateFile": "wan_animate_i_plus_v2v.api.json",
+  "inputs": [],
+  "defaults": {
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "frames": 120,
+    "steps": 20
+  }
+}

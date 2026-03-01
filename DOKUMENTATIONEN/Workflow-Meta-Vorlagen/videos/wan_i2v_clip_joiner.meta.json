@@ -1,0 +1,14 @@
+{
+  "id": "wan_i2v_clip_joiner",
+  "name": "WAN I2V Clip_Joiner",
+  "category": "videos",
+  "templateFile": "wan_i2v_clip_joiner.api.json",
+  "inputs": [],
+  "defaults": {
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "frames": 120,
+    "steps": 20
+  }
+}

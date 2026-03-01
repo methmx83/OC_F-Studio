@@ -1,0 +1,14 @@
+{
+  "id": "qwen_headswap",
+  "name": "Qwen Headswap",
+  "category": "images",
+  "templateFile": "qwen_headswap.api.json",
+  "inputs": [],
+  "defaults": {
+    "width": 1024,
+    "height": 1024,
+    "fps": 24,
+    "frames": 1,
+    "steps": 20
+  }
+}

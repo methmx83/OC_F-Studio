@@ -1,0 +1,24 @@
+{
+  "name": "ai-filmstudio",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build --workspace @ai-filmstudio/shared && npm run dev --workspace @ai-filmstudio/desktop",
+    "build": "npm run build --workspace @ai-filmstudio/shared && npm run build --workspace @ai-filmstudio/desktop",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "validate:workflows": "node ./scripts/validate-workflow-meta.mjs ."
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2"
+  },
+  "dependencies": {
+    "ajv-formats": "^3.0.1"
+  }
+}

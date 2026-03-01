@@ -1,0 +1,11 @@
+node_modules
+dist
+out
+.vite
+*.log
+.DS_Store
+# TypeScript build
+*.js
+*.d.ts
+*.tsbuildinfo
+dist/

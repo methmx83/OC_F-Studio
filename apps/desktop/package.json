@@ -1,0 +1,40 @@
+{
+  "name": "@ai-filmstudio/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc -b tsconfig.node.json tsconfig.web.json --pretty false",
+    "lint": "eslint . --ext .ts,.tsx"
+  },
+  "dependencies": {
+    "@ai-filmstudio/shared": "0.1.0",
+    "ajv": "^8.17.1",
+    "lucide-react": "^0.575.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/node": "^22.10.6",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@typescript-eslint/eslint-plugin": "^8.21.0",
+    "@typescript-eslint/parser": "^8.21.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.24",
+    "electron": "^33.3.1",
+    "electron-vite": "^5.0.0",
+    "eslint": "^9.18.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  }
+}

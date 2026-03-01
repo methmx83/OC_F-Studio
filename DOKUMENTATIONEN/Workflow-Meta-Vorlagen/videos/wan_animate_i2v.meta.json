@@ -1,0 +1,14 @@
+{
+  "id": "wan_animate_i2v",
+  "name": "WAN Animate I2V",
+  "category": "videos",
+  "templateFile": "wan_animate_i2v.api.json",
+  "inputs": [],
+  "defaults": {
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "frames": 120,
+    "steps": 20
+  }
+}

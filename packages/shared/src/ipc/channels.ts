@@ -1,0 +1,26 @@
+export const IPC_CHANNELS = {
+  project: {
+    new: 'project:new',
+    save: 'project:save',
+    load: 'project:load',
+    getRoot: 'project:get-root',
+    listWorkflowCatalog: 'project:list-workflow-catalog',
+    importVideo: 'project:import-video',
+    importImage: 'project:import-image',
+    importAudio: 'project:import-audio',
+    importComfyOutput: 'project:import-comfy-output',
+    importWorkflowTemplate: 'project:import-workflow-template',
+    assetThumbnailDataUrl: 'project:asset-thumbnail-data-url',
+    assetFileUrl: 'project:asset-file-url',
+    assetMediaDataUrl: 'project:asset-media-data-url',
+    ffmpegHealth: 'project:ffmpeg-health',
+    ensureVideoProxy: 'project:ensure-video-proxy',
+    audioWaveformPeaks: 'project:audio-waveform-peaks',
+  },
+  comfy: {
+    health: 'comfy:health',
+    queueRun: 'comfy:queue-run',
+    runEvent: 'comfy:run-event',
+  },
+} as const;
+

@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-scene-editor.local/project.schema.json",
+  "title": "Project",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "projectId",
+    "name",
+    "createdAt",
+    "assets",
+    "timeline",
+    "workflowDefinitions",
+    "workflowRuns"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 2,
+      "default": 2,
+      "examples": [2]
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "originalName",
+          "filePath",
+          "thumbnailPath",
+          "createdAt",
+          "tags",
+          "notes",
+          "status"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["image", "video", "audio"]
+          },
+          "originalName": { "type": "string" },
+          "filePath": { "type": "string" },
+          "durationSeconds": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "thumbnailPath": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "notes": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["idea", "generating", "review", "approved", "used"]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "timeline": {
+      "type": "object",
+      "required": ["tracks"],
+      "properties": {
+        "tracks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "kind", "name", "clips"],
+            "properties": {
+              "id": { "type": "string" },
+              "kind": {
+                "type": "string",
+                "enum": ["video", "overlay", "audio", "text"]
+              },
+              "name": { "type": "string" },
+              "clips": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "assetId", "start", "duration", "offset"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "assetId": { "type": "string" },
+                    "start": { "type": "number" },
+                    "duration": { "type": "number" },
+                    "offset": { "type": "number" },
+                    "gain": { "type": "number", "minimum": 0, "maximum": 2 },
+                    "automation": {
+                      "type": "object",
+                      "properties": {
+                        "gain": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": ["time", "value"],
+                            "properties": {
+                              "time": { "type": "number", "minimum": 0 },
+                              "value": { "type": "number", "minimum": 0, "maximum": 2 }
+                            },
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "workflowDefinitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "version", "config"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "config": { "type": "object" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "workflowRuns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "workflowId", "status", "createdAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "workflowId": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "running", "success", "failed"]
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

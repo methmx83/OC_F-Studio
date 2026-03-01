@@ -1,0 +1,14 @@
+{
+  "id": "flux_in_outpint",
+  "name": "Flux In/ Outpint",
+  "category": "images",
+  "templateFile": "flux_in_outpint.api.json",
+  "inputs": [],
+  "defaults": {
+    "width": 1024,
+    "height": 1024,
+    "fps": 24,
+    "frames": 1,
+    "steps": 20
+  }
+}
