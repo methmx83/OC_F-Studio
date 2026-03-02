@@ -117,14 +117,6 @@ export default function WorkflowStudioView() {
   const [autoPlaceImportedOutputs, setAutoPlaceImportedOutputs] = useState(true);
 
   useEffect(() => {
-    if (!projectRoot) {
-      setCatalog(null);
-      setWfId("");
-      setDrafts({});
-      setSendState({ status: "idle", message: "" });
-      setLoadState("idle");
-      return;
-    }
     void loadCatalog();
   }, [projectRoot]);
 
@@ -665,7 +657,7 @@ export default function WorkflowStudioView() {
                   <div className="w-12 h-12 mx-auto rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center"><FolderTree size={18} className="text-zinc-500" /></div>
                   <div className="text-sm font-black uppercase tracking-[0.2em] text-zinc-300">Select A Workflow</div>
                   <div className="text-xs text-zinc-500">Choose a category and workflow on the left. This panel is now editable and can send to the existing ComfyUI bridge.</div>
-                  <div className="text-[10px] text-zinc-600 font-mono break-all">{catalog?.projectWorkflowsRoot ?? `${projectRoot}\\workflows`}</div>
+                  <div className="text-[10px] text-zinc-600 font-mono break-all">{catalog?.projectWorkflowsRoot ?? "workflows"}</div>
                 </div>
               </div>
             ) : (
