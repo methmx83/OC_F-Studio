@@ -50,7 +50,8 @@ ajv.addFormat('date-time', true);
 const validateProject = ajv.compile<Project>(projectSchema);
 
 const PROJECT_FILE_NAME = 'project.json';
-const WORKFLOW_PRESETS_RELATIVE_PATH = path.join('workflows', 'presets.json');
+const WORKFLOW_PRESETS_LEGACY_RELATIVE_PATH = path.join('workflows', 'presets.json');
+const WORKFLOW_PRESETS_DIRECTORY_RELATIVE_PATH = path.join('workflows', 'presets');
 const COMFY_RUN_EVENT_CHANNEL = IPC_CHANNELS.comfy.runEvent;
 
 let currentProjectRoot: string | null = null;
@@ -288,14 +289,54 @@ function mergeWorkflowPresets(base: WorkflowPresetsMap, incoming: WorkflowPreset
   return merged;
 }
 
-async function readWorkflowPresetsFromDisk(projectRoot: string): Promise<WorkflowPresetsMap> {
-  const presetsPath = resolveProjectPath(projectRoot, WORKFLOW_PRESETS_RELATIVE_PATH);
+function resolveWorkflowPresetFilePath(projectRoot: string, workflowId: string): string {
+  return resolveProjectPath(projectRoot, path.join(WORKFLOW_PRESETS_DIRECTORY_RELATIVE_PATH, `${workflowId}.presets.json`));
+}
+
+async function readWorkflowPresetsLegacyFromDisk(projectRoot: string): Promise<WorkflowPresetsMap> {
+  const presetsPath = resolveProjectPath(projectRoot, WORKFLOW_PRESETS_LEGACY_RELATIVE_PATH);
   try {
     const raw = await fs.readFile(presetsPath, 'utf-8');
     return normalizeWorkflowPresetsMap(JSON.parse(raw));
   } catch {
     return {};
   }
+}
+
+async function readWorkflowPresetsFromDisk(projectRoot: string): Promise<WorkflowPresetsMap> {
+  const presetsDir = resolveProjectPath(projectRoot, WORKFLOW_PRESETS_DIRECTORY_RELATIVE_PATH);
+  const fromFiles: WorkflowPresetsMap = {};
+
+  try {
+    const entries = await fs.readdir(presetsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.presets.json')) {
+        continue;
+      }
+
+      const workflowId = entry.name.slice(0, -'.presets.json'.length);
+      if (!workflowId) {
+        continue;
+      }
+
+      try {
+        const fullPath = path.join(presetsDir, entry.name);
+        const raw = await fs.readFile(fullPath, 'utf-8');
+        const parsed = JSON.parse(raw) as unknown;
+        const normalized = normalizeWorkflowPresetsMap({ [workflowId]: parsed });
+        if (normalized[workflowId]?.length) {
+          fromFiles[workflowId] = normalized[workflowId];
+        }
+      } catch {
+        // ignore broken single preset files and continue with remaining files
+      }
+    }
+  } catch {
+    // ignore missing presets dir, legacy fallback below
+  }
+
+  const legacy = await readWorkflowPresetsLegacyFromDisk(projectRoot);
+  return mergeWorkflowPresets(legacy, fromFiles);
 }
 
 async function getWorkflowPresets(): Promise<WorkflowPresetsResponse> {
@@ -312,13 +353,20 @@ async function saveWorkflowPresets(presets: WorkflowPresetsMap): Promise<Workflo
     return { success: false, message: 'No ProjectRoot set. Create or load a project first.', presets: {} };
   }
 
-  const presetsPath = resolveProjectPath(currentProjectRoot, WORKFLOW_PRESETS_RELATIVE_PATH);
+  const projectRoot = currentProjectRoot;
   const normalizedIncoming = normalizeWorkflowPresetsMap(presets);
-  const diskPresets = await readWorkflowPresetsFromDisk(currentProjectRoot);
+  const diskPresets = await readWorkflowPresetsFromDisk(projectRoot);
   const merged = mergeWorkflowPresets(diskPresets, normalizedIncoming);
 
-  await fs.mkdir(path.dirname(presetsPath), { recursive: true });
-  await fs.writeFile(presetsPath, JSON.stringify(merged, null, 2), 'utf-8');
+  const presetsDir = resolveProjectPath(projectRoot, WORKFLOW_PRESETS_DIRECTORY_RELATIVE_PATH);
+  await fs.mkdir(presetsDir, { recursive: true });
+
+  const writeOps = Object.entries(merged).map(async ([workflowId, presetList]) => {
+    const targetPath = resolveWorkflowPresetFilePath(projectRoot, workflowId);
+    await fs.writeFile(targetPath, JSON.stringify(presetList, null, 2), 'utf-8');
+  });
+
+  await Promise.all(writeOps);
 
   return { success: true, message: 'Workflow presets saved.', presets: merged };
 }
