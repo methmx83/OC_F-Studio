@@ -348,12 +348,38 @@ async function getWorkflowPresets(): Promise<WorkflowPresetsResponse> {
   return { success: true, message: 'Workflow presets loaded.', presets };
 }
 
+async function backupLegacyWorkflowPresetsIfPresent(projectRoot: string): Promise<void> {
+  const legacyPath = resolveProjectPath(projectRoot, WORKFLOW_PRESETS_LEGACY_RELATIVE_PATH);
+  if (!existsSync(legacyPath)) {
+    return;
+  }
+
+  const workflowsDir = resolveProjectPath(projectRoot, 'workflows');
+  try {
+    const existing = await fs.readdir(workflowsDir);
+    if (existing.some((name) => /^presets\.migrated\..*\.bak\.json$/i.test(name))) {
+      return;
+    }
+  } catch {
+    // ignore; backup attempt below still best-effort
+  }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = resolveProjectPath(projectRoot, path.join('workflows', `presets.migrated.${stamp}.bak.json`));
+  try {
+    await fs.copyFile(legacyPath, backupPath);
+  } catch {
+    // best-effort backup only
+  }
+}
+
 async function saveWorkflowPresets(presets: WorkflowPresetsMap): Promise<WorkflowPresetsResponse> {
   if (!currentProjectRoot) {
     return { success: false, message: 'No ProjectRoot set. Create or load a project first.', presets: {} };
   }
 
   const projectRoot = currentProjectRoot;
+  await backupLegacyWorkflowPresetsIfPresent(projectRoot);
   const normalizedIncoming = normalizeWorkflowPresetsMap(presets);
   const diskPresets = await readWorkflowPresetsFromDisk(projectRoot);
   const merged = mergeWorkflowPresets(diskPresets, normalizedIncoming);
