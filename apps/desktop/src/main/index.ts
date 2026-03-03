@@ -313,9 +313,10 @@ async function hasPerWorkflowPresetFiles(projectRoot: string): Promise<boolean> 
   }
 }
 
-async function readWorkflowPresetsFromDisk(projectRoot: string): Promise<WorkflowPresetsMap> {
+async function readWorkflowPresetsFromDisk(projectRoot: string): Promise<{ presets: WorkflowPresetsMap; invalidFiles: string[] }> {
   const presetsDir = resolveProjectPath(projectRoot, WORKFLOW_PRESETS_DIRECTORY_RELATIVE_PATH);
   const fromFiles: WorkflowPresetsMap = {};
+  const invalidFiles: string[] = [];
 
   try {
     const entries = await fs.readdir(presetsDir, { withFileTypes: true });
@@ -338,7 +339,7 @@ async function readWorkflowPresetsFromDisk(projectRoot: string): Promise<Workflo
           fromFiles[workflowId] = normalized[workflowId];
         }
       } catch {
-        // ignore broken single preset files and continue with remaining files
+        invalidFiles.push(entry.name);
       }
     }
   } catch {
@@ -346,7 +347,10 @@ async function readWorkflowPresetsFromDisk(projectRoot: string): Promise<Workflo
   }
 
   const legacy = await readWorkflowPresetsLegacyFromDisk(projectRoot);
-  return mergeWorkflowPresets(legacy, fromFiles);
+  return {
+    presets: mergeWorkflowPresets(legacy, fromFiles),
+    invalidFiles,
+  };
 }
 
 async function writePerWorkflowPresetFiles(projectRoot: string, presets: WorkflowPresetsMap, prune = false): Promise<void> {
@@ -382,7 +386,8 @@ async function getWorkflowPresets(): Promise<WorkflowPresetsResponse> {
 
   const projectRoot = currentProjectRoot;
   const hasFileModePresets = await hasPerWorkflowPresetFiles(projectRoot);
-  const presets = await readWorkflowPresetsFromDisk(projectRoot);
+  const diskRead = await readWorkflowPresetsFromDisk(projectRoot);
+  const presets = diskRead.presets;
 
   if (!hasFileModePresets) {
     const legacy = await readWorkflowPresetsLegacyFromDisk(projectRoot);
@@ -391,6 +396,14 @@ async function getWorkflowPresets(): Promise<WorkflowPresetsResponse> {
       await writePerWorkflowPresetFiles(projectRoot, legacy, false);
       return { success: true, message: 'Workflow presets loaded and migrated to per-workflow files.', presets };
     }
+  }
+
+  if (diskRead.invalidFiles.length > 0) {
+    return {
+      success: true,
+      message: `Workflow presets loaded with warnings. Invalid files ignored: ${diskRead.invalidFiles.join(', ')}`,
+      presets,
+    };
   }
 
   return { success: true, message: 'Workflow presets loaded.', presets };
@@ -429,8 +442,8 @@ async function saveWorkflowPresets(presets: WorkflowPresetsMap): Promise<Workflo
   const projectRoot = currentProjectRoot;
   await backupLegacyWorkflowPresetsIfPresent(projectRoot);
   const normalizedIncoming = normalizeWorkflowPresetsMap(presets);
-  const diskPresets = await readWorkflowPresetsFromDisk(projectRoot);
-  const merged = mergeWorkflowPresets(diskPresets, normalizedIncoming);
+  const diskRead = await readWorkflowPresetsFromDisk(projectRoot);
+  const merged = mergeWorkflowPresets(diskRead.presets, normalizedIncoming);
 
   await writePerWorkflowPresetFiles(projectRoot, merged, true);
 
