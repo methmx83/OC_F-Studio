@@ -303,6 +303,16 @@ async function readWorkflowPresetsLegacyFromDisk(projectRoot: string): Promise<W
   }
 }
 
+async function hasPerWorkflowPresetFiles(projectRoot: string): Promise<boolean> {
+  const presetsDir = resolveProjectPath(projectRoot, WORKFLOW_PRESETS_DIRECTORY_RELATIVE_PATH);
+  try {
+    const entries = await fs.readdir(presetsDir, { withFileTypes: true });
+    return entries.some((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.presets.json'));
+  } catch {
+    return false;
+  }
+}
+
 async function readWorkflowPresetsFromDisk(projectRoot: string): Promise<WorkflowPresetsMap> {
   const presetsDir = resolveProjectPath(projectRoot, WORKFLOW_PRESETS_DIRECTORY_RELATIVE_PATH);
   const fromFiles: WorkflowPresetsMap = {};
@@ -339,12 +349,50 @@ async function readWorkflowPresetsFromDisk(projectRoot: string): Promise<Workflo
   return mergeWorkflowPresets(legacy, fromFiles);
 }
 
+async function writePerWorkflowPresetFiles(projectRoot: string, presets: WorkflowPresetsMap, prune = false): Promise<void> {
+  const presetsDir = resolveProjectPath(projectRoot, WORKFLOW_PRESETS_DIRECTORY_RELATIVE_PATH);
+  await fs.mkdir(presetsDir, { recursive: true });
+
+  if (prune) {
+    try {
+      const dirEntries = await fs.readdir(presetsDir, { withFileTypes: true });
+      const validFileNames = new Set(Object.keys(presets).map((workflowId) => `${workflowId}.presets.json`));
+      const removeOps = dirEntries
+        .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.presets.json'))
+        .filter((entry) => !validFileNames.has(entry.name))
+        .map((entry) => fs.unlink(path.join(presetsDir, entry.name)));
+      await Promise.all(removeOps);
+    } catch {
+      // best-effort cleanup only
+    }
+  }
+
+  const sortedWorkflowIds = Object.keys(presets).sort((a, b) => a.localeCompare(b));
+  const writeOps = sortedWorkflowIds.map(async (workflowId) => {
+    const targetPath = resolveWorkflowPresetFilePath(projectRoot, workflowId);
+    await fs.writeFile(targetPath, JSON.stringify(presets[workflowId], null, 2), 'utf-8');
+  });
+  await Promise.all(writeOps);
+}
+
 async function getWorkflowPresets(): Promise<WorkflowPresetsResponse> {
   if (!currentProjectRoot) {
     return { success: false, message: 'No ProjectRoot set. Create or load a project first.', presets: {} };
   }
 
-  const presets = await readWorkflowPresetsFromDisk(currentProjectRoot);
+  const projectRoot = currentProjectRoot;
+  const hasFileModePresets = await hasPerWorkflowPresetFiles(projectRoot);
+  const presets = await readWorkflowPresetsFromDisk(projectRoot);
+
+  if (!hasFileModePresets) {
+    const legacy = await readWorkflowPresetsLegacyFromDisk(projectRoot);
+    if (Object.keys(legacy).length > 0) {
+      await backupLegacyWorkflowPresetsIfPresent(projectRoot);
+      await writePerWorkflowPresetFiles(projectRoot, legacy, false);
+      return { success: true, message: 'Workflow presets loaded and migrated to per-workflow files.', presets };
+    }
+  }
+
   return { success: true, message: 'Workflow presets loaded.', presets };
 }
 
@@ -384,29 +432,7 @@ async function saveWorkflowPresets(presets: WorkflowPresetsMap): Promise<Workflo
   const diskPresets = await readWorkflowPresetsFromDisk(projectRoot);
   const merged = mergeWorkflowPresets(diskPresets, normalizedIncoming);
 
-  const presetsDir = resolveProjectPath(projectRoot, WORKFLOW_PRESETS_DIRECTORY_RELATIVE_PATH);
-  await fs.mkdir(presetsDir, { recursive: true });
-
-  // Remove stale per-workflow preset files that are no longer present after merge.
-  try {
-    const dirEntries = await fs.readdir(presetsDir, { withFileTypes: true });
-    const validFileNames = new Set(Object.keys(merged).map((workflowId) => `${workflowId}.presets.json`));
-    const removeOps = dirEntries
-      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.presets.json'))
-      .filter((entry) => !validFileNames.has(entry.name))
-      .map((entry) => fs.unlink(path.join(presetsDir, entry.name)));
-    await Promise.all(removeOps);
-  } catch {
-    // best-effort cleanup only
-  }
-
-  const sortedWorkflowIds = Object.keys(merged).sort((a, b) => a.localeCompare(b));
-  const writeOps = sortedWorkflowIds.map(async (workflowId) => {
-    const targetPath = resolveWorkflowPresetFilePath(projectRoot, workflowId);
-    await fs.writeFile(targetPath, JSON.stringify(merged[workflowId], null, 2), 'utf-8');
-  });
-
-  await Promise.all(writeOps);
+  await writePerWorkflowPresetFiles(projectRoot, merged, true);
 
   return { success: true, message: 'Workflow presets saved.', presets: merged };
 }
