@@ -10,6 +10,7 @@ import {
   Undo2,
   Redo2,
   Mic,
+  Images,
   FolderPlus,
   FolderOpen,
   Save,
@@ -50,7 +51,27 @@ function VoiceView() {
   );
 }
 
-type ActiveView = "studio" | "voice" | "lab" | "settings";
+function GalleryView() {
+  return (
+    <div className="h-full p-6 text-zinc-300">
+      <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400">
+        Comfy Gallery
+      </h2>
+      <p className="mt-2 text-xs text-zinc-500 max-w-3xl leading-relaxed">
+        Vorbereitung aktiv: Dieser Tab wird als zentraler Browser fuer Comfy-Outputs ausgebaut
+        (Bilder/Videos, Sortierung, Multi-Select, Direkt-Import in die Library/Timeline).
+      </p>
+      <ul className="mt-4 space-y-2 text-[11px] text-zinc-400 list-disc pl-5">
+        <li>Quelle: konfigurierbarer Comfy Output Ordner</li>
+        <li>Grid-Ansicht mit Thumbnail/Preview</li>
+        <li>Filter: image/video + neueste zuerst</li>
+        <li>Aktionen: Import selected / Import all new</li>
+      </ul>
+    </div>
+  );
+}
+
+type ActiveView = "studio" | "voice" | "gallery" | "lab" | "settings";
 
 export default function AppShell() {
   const [activeView, setActiveView] = useState<ActiveView>("studio");
@@ -149,6 +170,12 @@ export default function AppShell() {
               onClick={() => setActiveView("lab")}
               icon={<FlaskConical size={14} />}
               label="WF Studio"
+            />
+            <NavBtn
+              active={activeView === "gallery"}
+              onClick={() => setActiveView("gallery")}
+              icon={<Images size={14} />}
+              label="Gallery"
             />
             <NavBtn
               active={activeView === "settings"}
@@ -286,6 +313,8 @@ export default function AppShell() {
           <VoiceView />
         ) : activeView === "lab" ? (
           <WorkflowStudioView />
+        ) : activeView === "gallery" ? (
+          <GalleryView />
         ) : (
           <SettingsView />
         )}
