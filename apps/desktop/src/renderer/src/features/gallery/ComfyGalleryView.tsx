@@ -13,12 +13,37 @@ type GalleryItem = {
 };
 
 const COMFY_GALLERY_PATH_KEY = "ai-filmstudio.comfy.gallery.outputDir";
+const COMFY_GALLERY_IMPORTED_PATHS_KEY = "ai-filmstudio.comfy.gallery.importedPaths";
 
 function readStoredOutputDir(): string {
   try {
     return window.localStorage.getItem(COMFY_GALLERY_PATH_KEY)?.trim() ?? "";
   } catch {
     return "";
+  }
+}
+
+function readStoredImportedPaths(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(COMFY_GALLERY_IMPORTED_PATHS_KEY);
+    if (!raw) {
+      return new Set();
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return new Set();
+    }
+    return new Set(parsed.filter((entry): entry is string => typeof entry === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeStoredImportedPaths(paths: Set<string>): void {
+  try {
+    window.localStorage.setItem(COMFY_GALLERY_IMPORTED_PATHS_KEY, JSON.stringify(Array.from(paths)));
+  } catch {
+    // ignore storage errors
   }
 }
 
@@ -49,6 +74,7 @@ export default function ComfyGalleryView() {
   const [autoPlaceOnImport, setAutoPlaceOnImport] = useState(true);
   const [importingPath, setImportingPath] = useState<string | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+  const [persistedImportedPaths, setPersistedImportedPaths] = useState<Set<string>>(() => readStoredImportedPaths());
 
   useEffect(() => {
     try {
@@ -68,9 +94,9 @@ export default function ComfyGalleryView() {
     let base = kindFilter === "all" ? items : items.filter((item) => item.kind === kindFilter);
 
     if (importStateFilter === "new") {
-      base = base.filter((item) => !importedNames.has(item.fileName.toLowerCase()));
+      base = base.filter((item) => !importedNames.has(item.fileName.toLowerCase()) && !persistedImportedPaths.has(item.absolutePath));
     } else if (importStateFilter === "imported") {
-      base = base.filter((item) => importedNames.has(item.fileName.toLowerCase()));
+      base = base.filter((item) => importedNames.has(item.fileName.toLowerCase()) || persistedImportedPaths.has(item.absolutePath));
     }
 
     base = [...base].sort((a, b) => {
@@ -79,7 +105,7 @@ export default function ComfyGalleryView() {
     });
 
     return base;
-  }, [importStateFilter, importedNames, items, kindFilter, sortOrder]);
+  }, [importStateFilter, importedNames, items, kindFilter, persistedImportedPaths, sortOrder]);
 
   const selectedCount = selectedPaths.size;
 
@@ -108,6 +134,12 @@ export default function ComfyGalleryView() {
     try {
       const beforeIds = new Set(useStudioStore.getState().assets.map((asset) => asset.id));
       await importComfyOutputAsset(absolutePath);
+      setPersistedImportedPaths((current) => {
+        const next = new Set(current);
+        next.add(absolutePath);
+        writeStoredImportedPaths(next);
+        return next;
+      });
       if (autoPlaceOnImport) {
         const afterAssets = useStudioStore.getState().assets;
         afterAssets.filter((asset) => !beforeIds.has(asset.id)).forEach((asset) => dropAssetToTimeline(asset.id));
@@ -128,6 +160,12 @@ export default function ComfyGalleryView() {
       try {
         const beforeIds = new Set(useStudioStore.getState().assets.map((asset) => asset.id));
         await importComfyOutputAsset(absolutePath);
+        setPersistedImportedPaths((current) => {
+          const next = new Set(current);
+          next.add(absolutePath);
+          writeStoredImportedPaths(next);
+          return next;
+        });
         if (autoPlaceOnImport) {
           const afterAssets = useStudioStore.getState().assets;
           afterAssets.filter((asset) => !beforeIds.has(asset.id)).forEach((asset) => dropAssetToTimeline(asset.id));
@@ -143,7 +181,7 @@ export default function ComfyGalleryView() {
 
   async function importAllNew(): Promise<void> {
     const targets = filteredItems
-      .filter((item) => !importedNames.has(item.fileName.toLowerCase()))
+      .filter((item) => !importedNames.has(item.fileName.toLowerCase()) && !persistedImportedPaths.has(item.absolutePath))
       .map((item) => item.absolutePath);
 
     for (const absolutePath of targets) {
@@ -151,6 +189,12 @@ export default function ComfyGalleryView() {
       try {
         const beforeIds = new Set(useStudioStore.getState().assets.map((asset) => asset.id));
         await importComfyOutputAsset(absolutePath);
+        setPersistedImportedPaths((current) => {
+          const next = new Set(current);
+          next.add(absolutePath);
+          writeStoredImportedPaths(next);
+          return next;
+        });
         if (autoPlaceOnImport) {
           const afterAssets = useStudioStore.getState().assets;
           afterAssets.filter((asset) => !beforeIds.has(asset.id)).forEach((asset) => dropAssetToTimeline(asset.id));
@@ -269,7 +313,7 @@ export default function ComfyGalleryView() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {filteredItems.map((item) => {
               const isSelected = selectedPaths.has(item.absolutePath);
-              const isImported = importedNames.has(item.fileName.toLowerCase());
+              const isImported = importedNames.has(item.fileName.toLowerCase()) || persistedImportedPaths.has(item.absolutePath);
 
               return (
                 <div key={item.absolutePath} className={`rounded-lg border p-2 ${isSelected ? "border-blue-400/40 bg-blue-500/10" : "border-white/10 bg-black/20"}`}>
