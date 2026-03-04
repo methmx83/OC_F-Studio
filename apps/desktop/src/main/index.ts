@@ -23,6 +23,8 @@ import type {
   ComfyHealthRequest,
   ComfyHealthResponse,
   ComfyRunEvent,
+  PreviewComfyRunPayloadRequest,
+  PreviewComfyRunPayloadResponse,
   QueueComfyRunRequest,
   QueueComfyRunResponse,
 } from '@shared/comfy';
@@ -1120,6 +1122,9 @@ registerIpc({
   },
   queueComfyRun: async (payload: QueueComfyRunRequest): Promise<QueueComfyRunResponse> => {
     return comfyService.queueComfyRun(payload);
+  },
+  previewComfyRunPayload: async (payload: PreviewComfyRunPayloadRequest): Promise<PreviewComfyRunPayloadResponse> => {
+    return comfyService.previewComfyRunPayload(payload);
   },
   cancelComfyRun: async (payload: CancelComfyRunRequest): Promise<CancelComfyRunResponse> => {
     return comfyService.cancelComfyRun(payload);

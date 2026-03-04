@@ -23,6 +23,7 @@ export const IPC_CHANNELS = {
   comfy: {
     health: 'comfy:health',
     queueRun: 'comfy:queue-run',
+    previewRun: 'comfy:preview-run',
     cancelRun: 'comfy:cancel-run',
     runEvent: 'comfy:run-event',
   },

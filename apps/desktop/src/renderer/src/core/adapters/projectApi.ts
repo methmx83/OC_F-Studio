@@ -16,6 +16,8 @@ import type {
   ComfyHealthRequest,
   ComfyHealthResponse,
   ComfyRunEvent,
+  PreviewComfyRunPayloadRequest,
+  PreviewComfyRunPayloadResponse,
   QueueComfyRunRequest,
   QueueComfyRunResponse,
 } from '@shared/comfy';
@@ -43,6 +45,7 @@ export interface ProjectApiPort {
   getAudioWaveformPeaks: (relativeAudioPath: string, bins: number) => Promise<AudioWaveformResponse>;
   getComfyHealth: (request?: ComfyHealthRequest) => Promise<ComfyHealthResponse>;
   queueComfyRun: (payload: QueueComfyRunRequest) => Promise<QueueComfyRunResponse>;
+  previewComfyRunPayload: (payload: PreviewComfyRunPayloadRequest) => Promise<PreviewComfyRunPayloadResponse>;
   cancelComfyRun: (payload: CancelComfyRunRequest) => Promise<CancelComfyRunResponse>;
   onComfyRunEvent: (listener: (event: ComfyRunEvent) => void) => () => void;
 }

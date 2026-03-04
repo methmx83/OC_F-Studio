@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import type { CancelComfyRunRequest, CancelComfyRunResponse, ComfyHealthRequest, ComfyHealthResponse, ComfyRunEvent, QueueComfyRunRequest, QueueComfyRunResponse } from '@shared/comfy';
+import type { CancelComfyRunRequest, CancelComfyRunResponse, ComfyHealthRequest, ComfyHealthResponse, ComfyRunEvent, PreviewComfyRunPayloadRequest, PreviewComfyRunPayloadResponse, QueueComfyRunRequest, QueueComfyRunResponse } from '@shared/comfy';
 import type { ComfyGalleryListRequest, ComfyGalleryListResponse, WorkflowTemplateImportResponse } from '@shared/ipc/project';
 import {
   getProjectApi,
@@ -98,6 +98,10 @@ export function getIpcClient(): IpcClient {
     },
     queueComfyRun: async (payload: QueueComfyRunRequest): Promise<QueueComfyRunResponse> => {
       const method = requireMethod(api, 'queueComfyRun', COMFY_BRIDGE_UNAVAILABLE_MESSAGE);
+      return method(payload);
+    },
+    previewComfyRunPayload: async (payload: PreviewComfyRunPayloadRequest): Promise<PreviewComfyRunPayloadResponse> => {
+      const method = requireMethod(api, 'previewComfyRunPayload', COMFY_BRIDGE_UNAVAILABLE_MESSAGE);
       return method(payload);
     },
     cancelComfyRun: async (payload: CancelComfyRunRequest): Promise<CancelComfyRunResponse> => {

@@ -10,6 +10,8 @@ import type {
   ComfyHealthResponse,
   ComfyRunEvent,
   ComfyWorkflowRunRequest,
+  PreviewComfyRunPayloadRequest,
+  PreviewComfyRunPayloadResponse,
   QueueComfyRunRequest,
   QueueComfyRunResponse,
 } from '@shared/comfy';
@@ -38,6 +40,7 @@ export type ComfyBaseUrlPolicyResult =
 export interface ComfyService {
   getComfyHealth(request?: ComfyHealthRequest): Promise<ComfyHealthResponse>;
   queueComfyRun(payload: QueueComfyRunRequest): Promise<QueueComfyRunResponse>;
+  previewComfyRunPayload(payload: PreviewComfyRunPayloadRequest): Promise<PreviewComfyRunPayloadResponse>;
   cancelComfyRun(payload: CancelComfyRunRequest): Promise<CancelComfyRunResponse>;
   dispose(): void;
 }
@@ -795,6 +798,47 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
           message,
           runId,
         };
+      }
+    },
+
+    async previewComfyRunPayload(payload: PreviewComfyRunPayloadRequest): Promise<PreviewComfyRunPayloadResponse> {
+      const projectRoot = options.getCurrentProjectRoot();
+      if (!projectRoot) {
+        return { success: false, message: 'No project loaded. Create or load a project first.' };
+      }
+
+      const baseUrlResolution = resolveComfyBaseUrlPolicy(payload.baseUrlOverride);
+      if (!baseUrlResolution.ok) {
+        return { success: false, message: baseUrlResolution.message };
+      }
+
+      try {
+        const project = await options.readCurrentProjectFromDisk();
+        const template = await readWorkflowTemplate(
+          projectRoot,
+          options.getGlobalWorkflowsRoot(),
+          payload.request.workflowId,
+          payload.request.workflowTemplateRelativePath,
+          options.resolveProjectPath,
+        );
+        const variables = buildWorkflowTemplateVariables(payload.request, project, projectRoot, options.resolveProjectPath);
+        const renderedTemplate = applyTemplateVariables(template, variables);
+
+        const missingTokens = new Set<string>();
+        collectMissingTemplateTokens(renderedTemplate, variables, missingTokens);
+        if (missingTokens.size > 0) {
+          const missingJoined = Array.from(missingTokens).sort().join(', ');
+          return { success: false, message: `Workflow template contains unresolved placeholders: ${missingJoined}` };
+        }
+
+        return {
+          success: true,
+          message: 'Workflow payload rendered.',
+          baseUrl: baseUrlResolution.baseUrl,
+          renderedPrompt: renderedTemplate as Record<string, unknown>,
+        };
+      } catch (error) {
+        return { success: false, message: `Failed to render workflow payload: ${(error as Error).message}` };
       }
     },
 

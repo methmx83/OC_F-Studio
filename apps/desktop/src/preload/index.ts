@@ -18,6 +18,8 @@ import type {
   ComfyHealthRequest,
   ComfyHealthResponse,
   ComfyRunEvent,
+  PreviewComfyRunPayloadRequest,
+  PreviewComfyRunPayloadResponse,
   QueueComfyRunRequest,
   QueueComfyRunResponse,
 } from '@shared/comfy';
@@ -86,6 +88,9 @@ contextBridge.exposeInMainWorld('projectApi', {
   },
   queueComfyRun: async (payload: QueueComfyRunRequest): Promise<QueueComfyRunResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.comfy.queueRun, payload) as Promise<QueueComfyRunResponse>;
+  },
+  previewComfyRunPayload: async (payload: PreviewComfyRunPayloadRequest): Promise<PreviewComfyRunPayloadResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.comfy.previewRun, payload) as Promise<PreviewComfyRunPayloadResponse>;
   },
   cancelComfyRun: async (payload: CancelComfyRunRequest): Promise<CancelComfyRunResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.comfy.cancelRun, payload) as Promise<CancelComfyRunResponse>;

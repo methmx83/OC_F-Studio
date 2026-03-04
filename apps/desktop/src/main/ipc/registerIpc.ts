@@ -10,6 +10,8 @@ import type {
   CancelComfyRunResponse,
   ComfyHealthRequest,
   ComfyHealthResponse,
+  PreviewComfyRunPayloadRequest,
+  PreviewComfyRunPayloadResponse,
   QueueComfyRunRequest,
   QueueComfyRunResponse,
 } from '@shared/comfy';
@@ -23,6 +25,7 @@ export interface RegisterIpcHandlers {
   listWorkflowCatalog: () => Promise<WorkflowCatalogResponse>;
   getComfyHealth: (request?: ComfyHealthRequest) => Promise<ComfyHealthResponse>;
   queueComfyRun: (payload: QueueComfyRunRequest) => Promise<QueueComfyRunResponse>;
+  previewComfyRunPayload: (payload: PreviewComfyRunPayloadRequest) => Promise<PreviewComfyRunPayloadResponse>;
   cancelComfyRun: (payload: CancelComfyRunRequest) => Promise<CancelComfyRunResponse>;
   importVideo: () => Promise<AssetImportResponse>;
   importImage: () => Promise<AssetImportResponse>;
@@ -69,6 +72,13 @@ export function registerIpc(handlers: RegisterIpcHandlers): void {
     IPC_CHANNELS.comfy.queueRun,
     async (_event, payload: QueueComfyRunRequest): Promise<QueueComfyRunResponse> => {
       return handlers.queueComfyRun(payload);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.comfy.previewRun,
+    async (_event, payload: PreviewComfyRunPayloadRequest): Promise<PreviewComfyRunPayloadResponse> => {
+      return handlers.previewComfyRunPayload(payload);
     },
   );
 

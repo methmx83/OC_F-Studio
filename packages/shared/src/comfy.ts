@@ -63,6 +63,18 @@ export interface CancelComfyRunResponse {
   runId: string;
 }
 
+export interface PreviewComfyRunPayloadRequest {
+  request: ComfyWorkflowRunRequest;
+  baseUrlOverride?: string;
+}
+
+export interface PreviewComfyRunPayloadResponse {
+  success: boolean;
+  message: string;
+  baseUrl?: string;
+  renderedPrompt?: Record<string, unknown>;
+}
+
 export interface ComfyHealthResponse {
   online: boolean;
   baseUrl: string;

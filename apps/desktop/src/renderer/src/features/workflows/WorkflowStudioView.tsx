@@ -98,6 +98,7 @@ export default function WorkflowStudioView() {
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
   const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
   const [copiedAuthoringHint, setCopiedAuthoringHint] = useState<"tokens" | "inputs" | null>(null);
+  const [copiedRenderedPayload, setCopiedRenderedPayload] = useState(false);
   const [importAllSummaries, setImportAllSummaries] = useState<Record<string, ImportAllSummary>>({});
   const [runFilter, setRunFilter] = useState<RunFilter>("all");
   const [runSort, setRunSort] = useState<RunSort>(() => {
@@ -372,6 +373,42 @@ export default function WorkflowStudioView() {
     } catch (e) {
       const message = `Workflow queue request failed: ${e instanceof Error ? e.message : String(e)}`;
       setSendState({ status: "error", message, runId, hint: resolveComfyActionHint(message) });
+    }
+  }
+
+  function onOpenInComfyUi(): void {
+    const url = (comfyBaseUrl || "http://127.0.0.1:8188").trim();
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  async function onCopyRenderedPayload(): Promise<void> {
+    if (!validation?.request) {
+      return;
+    }
+
+    try {
+      const response = await getIpcClient().previewComfyRunPayload({
+        request: validation.request,
+        baseUrlOverride: comfyBaseUrl.trim().length > 0 ? comfyBaseUrl.trim() : undefined,
+      });
+
+      if (!response.success || !response.renderedPrompt) {
+        setSendState({
+          status: "error",
+          message: response.message || "Rendern des Workflow-Payloads fehlgeschlagen.",
+          hint: resolveComfyActionHint(response.message || ""),
+        });
+        return;
+      }
+
+      await navigator.clipboard.writeText(JSON.stringify(response.renderedPrompt, null, 2));
+      setCopiedRenderedPayload(true);
+      window.setTimeout(() => setCopiedRenderedPayload(false), 1500);
+    } catch (error) {
+      setSendState({
+        status: "error",
+        message: `Copy rendered payload failed: ${error instanceof Error ? error.message : String(error)}`,
+      });
     }
   }
 
@@ -652,10 +689,16 @@ export default function WorkflowStudioView() {
                   className="flex-1 px-3 py-2 rounded-xl border border-white/10 bg-zinc-950/70 text-[10px] font-mono text-zinc-200 placeholder:text-zinc-600"
                 />
               </div>
-              <div className="flex items-center gap-2 justify-end">
+              <div className="flex items-center gap-2 justify-end flex-wrap">
                 <button onClick={() => void checkComfyHealth()} className="px-3 py-2 rounded-xl border border-white/5 bg-zinc-950/60 text-[9px] font-black uppercase tracking-widest text-zinc-300 hover:text-white hover:border-zinc-700" title="Refresh ComfyUI health">
                   <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${comfyOnline ? "bg-emerald-400" : "bg-red-400"}`} />
                   {comfyOnline ? "Comfy Online" : "Comfy Offline"}
+                </button>
+                <button onClick={onOpenInComfyUi} className="px-3 py-2 rounded-xl border border-blue-500/20 bg-blue-500/10 text-[9px] font-black uppercase tracking-widest text-blue-200 hover:bg-blue-500/20">
+                  Open in ComfyUI
+                </button>
+                <button onClick={() => void onCopyRenderedPayload()} disabled={!validation?.canSend} className="px-3 py-2 rounded-xl border border-violet-500/20 bg-violet-500/10 text-[9px] font-black uppercase tracking-widest text-violet-200 disabled:opacity-40">
+                  {copiedRenderedPayload ? "Payload Copied" : "Copy Workflow JSON"}
                 </button>
                 <button onClick={() => void onSend()} disabled={sendState.status === "sending" || !validation?.canSend} className="px-4 py-2 rounded-xl bg-white text-black text-[10px] font-black uppercase tracking-widest disabled:opacity-40 flex items-center gap-2">
                   <Send size={12} /> {sendState.status === "sending" ? "Sending..." : "Send to ComfyUI"}
