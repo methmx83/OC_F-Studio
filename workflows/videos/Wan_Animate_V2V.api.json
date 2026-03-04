@@ -11,7 +11,7 @@
   "63": {
     "inputs": {
       "video": "{{faceVidAssetAbsPath}}",
-      "force_rate": 25,
+      "force_rate": "{{fps}}",
       "custom_width": 0,
       "custom_height": 0,
       "frame_load_cap": 0,
@@ -178,7 +178,7 @@
   },
   "209": {
     "inputs": {
-      "value": 81
+      "value": "{{frames}}"
     },
     "class_type": "PrimitiveInt",
     "_meta": {
@@ -187,7 +187,7 @@
   },
   "213": {
     "inputs": {
-      "value": 1280
+      "value": "{{width}}"
     },
     "class_type": "PrimitiveInt",
     "_meta": {
@@ -196,7 +196,7 @@
   },
   "214": {
     "inputs": {
-      "value": 720
+      "value": "{{height}}"
     },
     "class_type": "PrimitiveInt",
     "_meta": {
@@ -230,7 +230,7 @@
         "214",
         0
       ],
-      "length": 81,
+      "length": "{{frames}}",
       "batch_size": 1,
       "continue_motion_max_frames": 5,
       "video_frame_offset": 0,
@@ -299,7 +299,7 @@
   },
   "236": {
     "inputs": {
-      "frame_rate": 25,
+      "frame_rate": "{{fps}}",
       "loop_count": 0,
       "filename_prefix": "progress",
       "format": "video/h264-mp4",
@@ -364,7 +364,7 @@
   "243": {
     "inputs": {
       "seed": 262428895961295,
-      "steps": 4,
+      "steps": "{{steps}}",
       "cfg": 1,
       "sampler_name": "euler",
       "scheduler": "simple",
@@ -425,7 +425,7 @@
   },
   "250": {
     "inputs": {
-      "fps": 25,
+      "fps": "{{fps}}",
       "images": [
         "172",
         1
@@ -567,7 +567,7 @@
   },
   "292": {
     "inputs": {
-      "frame_rate": 25,
+      "frame_rate": "{{fps}}",
       "loop_count": 0,
       "filename_prefix": "progress",
       "format": "video/h264-mp4",
@@ -747,7 +747,7 @@
   "309": {
     "inputs": {
       "seed": 389730206857451,
-      "steps": 4,
+      "steps": "{{steps}}",
       "cfg": 1,
       "sampler_name": "euler",
       "scheduler": "simple",
@@ -818,7 +818,7 @@
   },
   "320": {
     "inputs": {
-      "frame_rate": 25,
+      "frame_rate": "{{fps}}",
       "loop_count": 0,
       "filename_prefix": "IAMCSS/V2V_",
       "format": "video/h264-mp4",
@@ -996,7 +996,7 @@
   },
   "457": {
     "inputs": {
-      "fps": 25,
+      "fps": "{{fps}}",
       "images": [
         "440",
         0
@@ -1010,7 +1010,7 @@
   "458": {
     "inputs": {
       "video": "{{PoseVidAssetAbsPath}}",
-      "force_rate": 25,
+      "force_rate": "{{fps}}",
       "custom_width": 0,
       "custom_height": 0,
       "frame_load_cap": 0,
@@ -1158,3 +1158,5 @@
     }
   }
 }
+
+

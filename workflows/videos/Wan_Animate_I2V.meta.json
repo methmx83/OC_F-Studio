@@ -9,8 +9,13 @@
       "type": "image",
       "label": "Reference Image",
       "required": true
+    },
+    {
+      "key": "PoseVidAssetId",
+      "type": "video",
+      "label": "Pose Video",
+      "required": true
     }
-    
   ],
   "defaults": {
     "width": 1280,
