@@ -110,6 +110,7 @@ export default function WorkflowStudioView() {
   });
   const [presetsByWorkflow, setPresetsByWorkflow] = useState<Record<string, WorkflowPreset[]>>({});
   const [presetUpdatedAtByWorkflow, setPresetUpdatedAtByWorkflow] = useState<Record<string, string>>({});
+  const [presetLoadWarning, setPresetLoadWarning] = useState<string | null>(null);
   const [presetsHydrated, setPresetsHydrated] = useState(false);
   const [isSavingPresets, setIsSavingPresets] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState("");
@@ -168,6 +169,7 @@ export default function WorkflowStudioView() {
       if (!projectRoot) {
         setPresetsByWorkflow({});
         setPresetUpdatedAtByWorkflow({});
+        setPresetLoadWarning(null);
         setPresetsHydrated(false);
         return;
       }
@@ -179,13 +181,16 @@ export default function WorkflowStudioView() {
         if (response.success) {
           setPresetsByWorkflow(response.presets ?? {});
           setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
+          setPresetLoadWarning((response.message || "").includes("with warnings") ? response.message : null);
         } else {
           setPresetsByWorkflow({});
+          setPresetLoadWarning(null);
           setSendState({ status: "error", message: response.message || "Workflow-Presets konnten nicht geladen werden." });
         }
       } catch (error) {
         if (isCancelled) return;
         setPresetsByWorkflow({});
+        setPresetLoadWarning(null);
         setSendState({
           status: "error",
           message: `Workflow-Presets konnten nicht geladen werden: ${error instanceof Error ? error.message : String(error)}`,
@@ -813,6 +818,13 @@ export default function WorkflowStudioView() {
                     Regel: <span className="font-mono text-zinc-300">meta.inputs[].key</span> als <span className="font-mono text-zinc-300">...AssetId</span>, Template nutzt abgeleitete Token wie <span className="font-mono text-zinc-300">{"{{...AssetAbsPath}}"}</span>.
                   </div>
                 </div>
+
+                {presetLoadWarning && (
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-[10px] text-amber-200">
+                    <div className="font-black uppercase tracking-wider text-[9px]">Preset Warning</div>
+                    <div className="mt-1 text-amber-100/90">{presetLoadWarning}</div>
+                  </div>
+                )}
 
                 <div className="rounded-2xl border border-white/5 bg-zinc-950/30 p-4 text-[10px]">
                   <div className="flex items-center justify-between gap-2">
