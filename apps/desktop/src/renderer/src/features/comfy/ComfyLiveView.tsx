@@ -41,8 +41,7 @@ export default function ComfyLiveView() {
         key={reloadKey}
         src={comfyUrl}
         className="w-full h-full"
-        style={{ width: "100%", height: "100%", display: "block" }}
-        autosize={true}
+        style={{ position: "absolute", inset: "0", width: "100%", height: "100%", display: "block" }}
         allowpopups={true}
         webpreferences="contextIsolation=yes"
       />
