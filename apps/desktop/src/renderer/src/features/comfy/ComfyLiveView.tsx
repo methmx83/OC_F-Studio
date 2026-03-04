@@ -19,7 +19,7 @@ export default function ComfyLiveView() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Comfy Live</div>
-          <div className="text-[11px] text-zinc-500 mt-1">Eingebettete ComfyUI direkt in der App.</div>
+          <div className="text-[11px] text-zinc-500 mt-1">ComfyUI nativ in der App (WebView).</div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -47,12 +47,13 @@ export default function ComfyLiveView() {
       </div>
 
       <div className="flex-1 rounded-xl overflow-hidden border border-white/10 bg-black">
-        <iframe
+        <webview
           key={reloadKey}
           src={comfyUrl}
-          title="Comfy Live"
-          className="w-full h-full border-0"
-          referrerPolicy="no-referrer"
+          className="w-full h-full"
+          style={{ width: "100%", height: "100%", display: "inline-flex" }}
+          allowpopups={true}
+          webpreferences="contextIsolation=yes"
         />
       </div>
     </div>

@@ -165,7 +165,7 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      webviewTag: false,
+      webviewTag: true,
       // Local-only dev workflow: allow renderer served from localhost
       // to load local file:// media sources for preview playback.
       webSecurity: isProduction,
