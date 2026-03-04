@@ -11,6 +11,7 @@ import {
   Redo2,
   Mic,
   Images,
+  MonitorPlay,
   FolderPlus,
   FolderOpen,
   Save,
@@ -23,6 +24,7 @@ import ComfyPanel from "../../features/comfy/ComfyPanel";
 import TimelineDock from "../../features/timeline/TimelineDock";
 import WorkflowStudioView from "../../features/workflows/WorkflowStudioView";
 import ComfyGalleryView from "../../features/gallery/ComfyGalleryView";
+import ComfyLiveView from "../../features/comfy/ComfyLiveView";
 import { selectAppShellStoreState } from "../../core/store/selectors";
 import { useStudioStore } from "../../core/store/studioStore";
 
@@ -52,7 +54,7 @@ function VoiceView() {
   );
 }
 
-type ActiveView = "studio" | "voice" | "gallery" | "lab" | "settings";
+type ActiveView = "studio" | "voice" | "gallery" | "comfy" | "lab" | "settings";
 
 export default function AppShell() {
   const [activeView, setActiveView] = useState<ActiveView>("studio");
@@ -157,6 +159,12 @@ export default function AppShell() {
               onClick={() => setActiveView("gallery")}
               icon={<Images size={14} />}
               label="Gallery"
+            />
+            <NavBtn
+              active={activeView === "comfy"}
+              onClick={() => setActiveView("comfy")}
+              icon={<MonitorPlay size={14} />}
+              label="Comfy Live"
             />
             <NavBtn
               active={activeView === "settings"}
@@ -296,6 +304,8 @@ export default function AppShell() {
           <WorkflowStudioView />
         ) : activeView === "gallery" ? (
           <ComfyGalleryView />
+        ) : activeView === "comfy" ? (
+          <ComfyLiveView />
         ) : (
           <SettingsView />
         )}
