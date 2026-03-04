@@ -225,7 +225,16 @@ export default function WorkflowStudioView() {
           }
           setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
         } else {
-          setSendState({ status: "error", message: response.message || "Workflow-Presets konnten nicht gespeichert werden." });
+          if ((response.message || "").includes("PRESET_CONFLICT")) {
+            setPresetsByWorkflow(response.presets ?? {});
+            setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
+            setSendState({
+              status: "error",
+              message: "Preset-Konflikt erkannt: Datei wurde extern geaendert. Stand wurde neu geladen, bitte Aenderung erneut speichern.",
+            });
+          } else {
+            setSendState({ status: "error", message: response.message || "Workflow-Presets konnten nicht gespeichert werden." });
+          }
         }
       } catch (error) {
         if (isCancelled) return;
