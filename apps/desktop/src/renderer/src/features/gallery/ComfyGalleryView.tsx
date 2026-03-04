@@ -36,6 +36,7 @@ function toFileUrl(absolutePath: string): string {
 
 export default function ComfyGalleryView() {
   const importComfyOutputAsset = useStudioStore((state) => state.importComfyOutputAsset);
+  const dropAssetToTimeline = useStudioStore((state) => state.dropAssetToTimeline);
   const assets = useStudioStore((state) => state.assets);
 
   const [outputDir, setOutputDir] = useState(readStoredOutputDir);
@@ -43,6 +44,9 @@ export default function ComfyGalleryView() {
   const [status, setStatus] = useState<string>("Noch nicht geladen.");
   const [loading, setLoading] = useState(false);
   const [kindFilter, setKindFilter] = useState<"all" | "image" | "video">("all");
+  const [importStateFilter, setImportStateFilter] = useState<"all" | "new" | "imported">("all");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const [autoPlaceOnImport, setAutoPlaceOnImport] = useState(true);
   const [importingPath, setImportingPath] = useState<string | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
 
@@ -61,9 +65,21 @@ export default function ComfyGalleryView() {
   const importedNames = useMemo(() => new Set(assets.map((asset) => asset.originalName.toLowerCase())), [assets]);
 
   const filteredItems = useMemo(() => {
-    const base = kindFilter === "all" ? items : items.filter((item) => item.kind === kindFilter);
+    let base = kindFilter === "all" ? items : items.filter((item) => item.kind === kindFilter);
+
+    if (importStateFilter === "new") {
+      base = base.filter((item) => !importedNames.has(item.fileName.toLowerCase()));
+    } else if (importStateFilter === "imported") {
+      base = base.filter((item) => importedNames.has(item.fileName.toLowerCase()));
+    }
+
+    base = [...base].sort((a, b) => {
+      const delta = new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
+      return sortOrder === "newest" ? delta : -delta;
+    });
+
     return base;
-  }, [items, kindFilter]);
+  }, [importStateFilter, importedNames, items, kindFilter, sortOrder]);
 
   const selectedCount = selectedPaths.size;
 
@@ -90,7 +106,12 @@ export default function ComfyGalleryView() {
   async function importSingle(absolutePath: string): Promise<void> {
     setImportingPath(absolutePath);
     try {
+      const beforeIds = new Set(useStudioStore.getState().assets.map((asset) => asset.id));
       await importComfyOutputAsset(absolutePath);
+      if (autoPlaceOnImport) {
+        const afterAssets = useStudioStore.getState().assets;
+        afterAssets.filter((asset) => !beforeIds.has(asset.id)).forEach((asset) => dropAssetToTimeline(asset.id));
+      }
     } finally {
       setImportingPath(null);
     }
@@ -105,7 +126,12 @@ export default function ComfyGalleryView() {
     for (const absolutePath of targets) {
       setImportingPath(absolutePath);
       try {
+        const beforeIds = new Set(useStudioStore.getState().assets.map((asset) => asset.id));
         await importComfyOutputAsset(absolutePath);
+        if (autoPlaceOnImport) {
+          const afterAssets = useStudioStore.getState().assets;
+          afterAssets.filter((asset) => !beforeIds.has(asset.id)).forEach((asset) => dropAssetToTimeline(asset.id));
+        }
       } catch {
         // continue with remaining files
       }
@@ -123,7 +149,12 @@ export default function ComfyGalleryView() {
     for (const absolutePath of targets) {
       setImportingPath(absolutePath);
       try {
+        const beforeIds = new Set(useStudioStore.getState().assets.map((asset) => asset.id));
         await importComfyOutputAsset(absolutePath);
+        if (autoPlaceOnImport) {
+          const afterAssets = useStudioStore.getState().assets;
+          afterAssets.filter((asset) => !beforeIds.has(asset.id)).forEach((asset) => dropAssetToTimeline(asset.id));
+        }
       } catch {
         // continue with remaining files
       }
@@ -178,6 +209,37 @@ export default function ComfyGalleryView() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 text-[9px]">
+        <span className="text-zinc-500 uppercase tracking-wider">Import-Filter</span>
+        {(["all", "new", "imported"] as const).map((state) => (
+          <button
+            key={state}
+            onClick={() => setImportStateFilter(state)}
+            className={`px-2 py-1 rounded-md border uppercase tracking-wider ${importStateFilter === state ? "border-violet-500/40 bg-violet-500/10 text-violet-200" : "border-white/10 bg-zinc-950/70 text-zinc-400"}`}
+          >
+            {state}
+          </button>
+        ))}
+
+        <span className="text-zinc-500 uppercase tracking-wider ml-3">Sort</span>
+        {(["newest", "oldest"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setSortOrder(mode)}
+            className={`px-2 py-1 rounded-md border uppercase tracking-wider ${sortOrder === mode ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-200" : "border-white/10 bg-zinc-950/70 text-zinc-400"}`}
+          >
+            {mode}
+          </button>
+        ))}
+
+        <button
+          onClick={() => setAutoPlaceOnImport((current) => !current)}
+          className={`px-2 py-1 rounded-md border uppercase tracking-wider ml-3 ${autoPlaceOnImport ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-white/10 bg-zinc-950/70 text-zinc-400"}`}
+        >
+          Auto-Place {autoPlaceOnImport ? "ON" : "OFF"}
+        </button>
       </div>
 
       <div className="flex items-center justify-between gap-2 text-[10px] text-zinc-500">
