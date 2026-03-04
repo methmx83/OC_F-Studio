@@ -958,6 +958,7 @@ function isJsonObject(value: JsonValue): value is { [key: string]: JsonValue } {
 
 const comfyService = createComfyService({
   getCurrentProjectRoot: () => currentProjectRoot,
+  getGlobalWorkflowsRoot: () => resolveGlobalWorkflowsRoot(),
   readCurrentProjectFromDisk,
   resolveProjectPath,
   emitRunEvent: emitComfyRunEvent,

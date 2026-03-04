@@ -44,6 +44,7 @@ export interface ComfyService {
 
 export interface CreateComfyServiceOptions {
   getCurrentProjectRoot(): string | null;
+  getGlobalWorkflowsRoot(): string;
   readCurrentProjectFromDisk(): Promise<Project>;
   resolveProjectPath(projectRoot: string, relativePath: string): string;
   emitRunEvent(event: Omit<ComfyRunEvent, 'occurredAt'>): void;
@@ -155,6 +156,7 @@ export function resolveComfyBaseUrl(baseUrlOverride?: string): string {
 
 async function readWorkflowTemplate(
   projectRoot: string,
+  globalWorkflowsRoot: string,
   workflowId: string,
   workflowTemplateRelativePath: string | undefined,
   resolveProjectPath: (projectRoot: string, relativePath: string) => string,
@@ -176,16 +178,30 @@ async function readWorkflowTemplate(
     ? templateRelativePath
     : path.posix.join('workflows', templateRelativePath);
 
-  const templatePath = resolveProjectPath(projectRoot, normalizedRelativePath);
+  const templatePathInProject = resolveProjectPath(projectRoot, normalizedRelativePath);
+  const globalRelative = normalizedRelativePath.startsWith('workflows/')
+    ? normalizedRelativePath.slice('workflows/'.length)
+    : normalizedRelativePath;
+  const templatePathInGlobal = resolveProjectPath(globalWorkflowsRoot, globalRelative);
+
   let raw: string;
   try {
-    raw = await fs.readFile(templatePath, 'utf-8');
+    raw = await fs.readFile(templatePathInProject, 'utf-8');
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
-    if (nodeError.code === 'ENOENT') {
-      throw new Error(`Workflow template missing: ${normalizedRelativePath}`);
+    if (nodeError.code !== 'ENOENT') {
+      throw error;
     }
-    throw error;
+
+    try {
+      raw = await fs.readFile(templatePathInGlobal, 'utf-8');
+    } catch (fallbackError) {
+      const fallbackNodeError = fallbackError as NodeJS.ErrnoException;
+      if (fallbackNodeError.code === 'ENOENT') {
+        throw new Error(`Workflow template missing: ${normalizedRelativePath}`);
+      }
+      throw fallbackError;
+    }
   }
 
   const parsed = JSON.parse(raw) as unknown;
@@ -708,6 +724,7 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
         const project = await options.readCurrentProjectFromDisk();
         const template = await readWorkflowTemplate(
           projectRoot,
+          options.getGlobalWorkflowsRoot(),
           workflowRequest.workflowId,
           workflowRequest.workflowTemplateRelativePath,
           options.resolveProjectPath,
