@@ -2,6 +2,8 @@
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
 import type {
+  ComfyGalleryListRequest,
+  ComfyGalleryListResponse,
   ProjectResponse,
   WorkflowPresetsResponse,
   WorkflowPresetsSaveRequest,
@@ -27,6 +29,7 @@ export interface ProjectApiPort {
   importImage: () => Promise<AssetImportResponse>;
   importAudio: () => Promise<AssetImportResponse>;
   importComfyOutput: (outputPath: string) => Promise<AssetImportResponse>;
+  listComfyGallery: (request?: ComfyGalleryListRequest) => Promise<ComfyGalleryListResponse>;
   importWorkflowTemplate: (workflowId: string) => Promise<WorkflowTemplateImportResponse>;
   getWorkflowPresets: () => Promise<WorkflowPresetsResponse>;
   saveWorkflowPresets: (request: WorkflowPresetsSaveRequest) => Promise<WorkflowPresetsResponse>;

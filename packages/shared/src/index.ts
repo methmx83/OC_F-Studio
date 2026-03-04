@@ -30,6 +30,9 @@ export type {
   WorkflowPresetsResponse,
   WorkflowPresetsSaveRequest,
   WorkflowTemplateImportResponse,
+  ComfyGalleryItem,
+  ComfyGalleryListRequest,
+  ComfyGalleryListResponse,
 } from './ipc/project.js';
 export type {
   WorkflowCatalogCategory,

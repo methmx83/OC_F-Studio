@@ -42,3 +42,23 @@ export interface WorkflowPresetsResponse {
   updatedAtByWorkflow?: Record<string, string>;
 }
 
+export interface ComfyGalleryListRequest {
+  outputDir?: string;
+  limit?: number;
+}
+
+export interface ComfyGalleryItem {
+  absolutePath: string;
+  fileName: string;
+  kind: 'image' | 'video';
+  sizeBytes: number;
+  modifiedAt: string;
+}
+
+export interface ComfyGalleryListResponse {
+  success: boolean;
+  message: string;
+  outputDir?: string;
+  items: ComfyGalleryItem[];
+}
+

@@ -4,6 +4,8 @@ import { IPC_CHANNELS } from '@ai-filmstudio/shared';
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
 import type {
+  ComfyGalleryListRequest,
+  ComfyGalleryListResponse,
   ProjectResponse,
   WorkflowPresetsResponse,
   WorkflowPresetsSaveRequest,
@@ -42,6 +44,9 @@ contextBridge.exposeInMainWorld('projectApi', {
   },
   importComfyOutput: async (outputPath: string): Promise<AssetImportResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.importComfyOutput, outputPath) as Promise<AssetImportResponse>;
+  },
+  listComfyGallery: async (request?: ComfyGalleryListRequest): Promise<ComfyGalleryListResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.listComfyGallery, request) as Promise<ComfyGalleryListResponse>;
   },
   importWorkflowTemplate: async (workflowId: string): Promise<WorkflowTemplateImportResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.importWorkflowTemplate, workflowId) as Promise<WorkflowTemplateImportResponse>;

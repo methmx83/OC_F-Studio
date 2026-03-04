@@ -9,6 +9,7 @@ export const IPC_CHANNELS = {
     importImage: 'project:import-image',
     importAudio: 'project:import-audio',
     importComfyOutput: 'project:import-comfy-output',
+    listComfyGallery: 'project:list-comfy-gallery',
     importWorkflowTemplate: 'project:import-workflow-template',
     getWorkflowPresets: 'project:get-workflow-presets',
     saveWorkflowPresets: 'project:save-workflow-presets',

@@ -22,6 +22,7 @@ import PreviewStage from "../../features/preview/PreviewStage";
 import ComfyPanel from "../../features/comfy/ComfyPanel";
 import TimelineDock from "../../features/timeline/TimelineDock";
 import WorkflowStudioView from "../../features/workflows/WorkflowStudioView";
+import ComfyGalleryView from "../../features/gallery/ComfyGalleryView";
 import { selectAppShellStoreState } from "../../core/store/selectors";
 import { useStudioStore } from "../../core/store/studioStore";
 
@@ -47,26 +48,6 @@ function VoiceView() {
       <p className="mt-2 text-xs text-zinc-500">
         Later: local TTS/SVC pipeline, no cloud usage.
       </p>
-    </div>
-  );
-}
-
-function GalleryView() {
-  return (
-    <div className="h-full p-6 text-zinc-300">
-      <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400">
-        Comfy Gallery
-      </h2>
-      <p className="mt-2 text-xs text-zinc-500 max-w-3xl leading-relaxed">
-        Vorbereitung aktiv: Dieser Tab wird als zentraler Browser fuer Comfy-Outputs ausgebaut
-        (Bilder/Videos, Sortierung, Multi-Select, Direkt-Import in die Library/Timeline).
-      </p>
-      <ul className="mt-4 space-y-2 text-[11px] text-zinc-400 list-disc pl-5">
-        <li>Quelle: konfigurierbarer Comfy Output Ordner</li>
-        <li>Grid-Ansicht mit Thumbnail/Preview</li>
-        <li>Filter: image/video + neueste zuerst</li>
-        <li>Aktionen: Import selected / Import all new</li>
-      </ul>
     </div>
   );
 }
@@ -314,7 +295,7 @@ export default function AppShell() {
         ) : activeView === "lab" ? (
           <WorkflowStudioView />
         ) : activeView === "gallery" ? (
-          <GalleryView />
+          <ComfyGalleryView />
         ) : (
           <SettingsView />
         )}

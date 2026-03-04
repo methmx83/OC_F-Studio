@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 import type { CancelComfyRunRequest, CancelComfyRunResponse, ComfyHealthRequest, ComfyHealthResponse, ComfyRunEvent, QueueComfyRunRequest, QueueComfyRunResponse } from '@shared/comfy';
-import type { WorkflowTemplateImportResponse } from '@shared/ipc/project';
+import type { ComfyGalleryListRequest, ComfyGalleryListResponse, WorkflowTemplateImportResponse } from '@shared/ipc/project';
 import {
   getProjectApi,
   type ProjectApiPort,
@@ -74,6 +74,10 @@ export function getIpcClient(): IpcClient {
     importImage: () => requireMethod(api, 'importImage', PROJECT_API_UNAVAILABLE_MESSAGE)(),
     importAudio: () => requireMethod(api, 'importAudio', PROJECT_API_UNAVAILABLE_MESSAGE)(),
     importComfyOutput: (outputPath) => requireMethod(api, 'importComfyOutput', PROJECT_API_UNAVAILABLE_MESSAGE)(outputPath),
+    listComfyGallery: async (request?: ComfyGalleryListRequest): Promise<ComfyGalleryListResponse> => {
+      const method = requireMethod(api, 'listComfyGallery', PROJECT_API_UNAVAILABLE_MESSAGE);
+      return method(request);
+    },
     importWorkflowTemplate: async (workflowId: string): Promise<WorkflowTemplateImportResponse> => {
       const method = requireMethod(api, 'importWorkflowTemplate', WORKFLOW_TEMPLATE_IMPORT_UNAVAILABLE_MESSAGE);
       return method(workflowId);

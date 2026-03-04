@@ -7,6 +7,8 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import { IPC_CHANNELS } from '@ai-filmstudio/shared';
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type {
+  ComfyGalleryListRequest,
+  ComfyGalleryListResponse,
   ProjectResponse,
   WorkflowPresetItem,
   WorkflowPresetsMap,
@@ -543,6 +545,97 @@ function detectImportableAssetTypeFromExtension(fileName: string): 'video' | 'im
   return null;
 }
 
+async function listComfyGallery(request?: ComfyGalleryListRequest): Promise<ComfyGalleryListResponse> {
+  const configured = request?.outputDir?.trim() || process.env.COMFYUI_OUTPUT_DIR?.trim() || '';
+  if (!configured) {
+    return {
+      success: false,
+      message: 'Kein Comfy Output Ordner gesetzt. Bitte Pfad in der Gallery eintragen.',
+      items: [],
+    };
+  }
+
+  const outputDir = path.resolve(configured);
+  let rootEntries: import('node:fs').Dirent[] = [];
+  try {
+    rootEntries = await fs.readdir(outputDir, { withFileTypes: true });
+  } catch (error) {
+    return {
+      success: false,
+      message: `Comfy Output Ordner nicht lesbar: ${(error as Error).message}`,
+      outputDir,
+      items: [],
+    };
+  }
+
+  const limit = Math.max(20, Math.min(request?.limit ?? 400, 2000));
+  const collected: Array<{ absolutePath: string; fileName: string; kind: 'image' | 'video'; sizeBytes: number; modifiedAt: string }> = [];
+  const queue: string[] = rootEntries.filter((entry) => entry.isDirectory()).map((entry) => path.join(outputDir, entry.name));
+
+  const addFileIfSupported = async (absolutePath: string, fileName: string): Promise<void> => {
+    const type = detectImportableAssetTypeFromExtension(fileName);
+    if (type !== 'image' && type !== 'video') {
+      return;
+    }
+
+    try {
+      const stat = await fs.stat(absolutePath);
+      if (!stat.isFile()) {
+        return;
+      }
+      collected.push({
+        absolutePath,
+        fileName,
+        kind: type,
+        sizeBytes: stat.size,
+        modifiedAt: stat.mtime.toISOString(),
+      });
+    } catch {
+      // ignore unreadable file
+    }
+  };
+
+  for (const entry of rootEntries) {
+    if (entry.isFile()) {
+      await addFileIfSupported(path.join(outputDir, entry.name), entry.name);
+    }
+  }
+
+  while (queue.length > 0 && collected.length < limit) {
+    const currentDir = queue.shift() as string;
+    let children: import('node:fs').Dirent[] = [];
+    try {
+      children = await fs.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const child of children) {
+      const absolute = path.join(currentDir, child.name);
+      if (child.isDirectory()) {
+        queue.push(absolute);
+      } else if (child.isFile()) {
+        await addFileIfSupported(absolute, child.name);
+      }
+
+      if (collected.length >= limit) {
+        break;
+      }
+    }
+  }
+
+  const items = collected
+    .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
+    .slice(0, limit);
+
+  return {
+    success: true,
+    message: `Comfy Gallery geladen (${items.length} Dateien).`,
+    outputDir,
+    items,
+  };
+}
+
 const AUDIO_THUMBNAIL_PLACEHOLDER_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z4nQAAAAASUVORK5CYII=';
 
 async function writeAudioThumbnailPlaceholder(absoluteThumbnailPath: string): Promise<void> {
@@ -1041,6 +1134,9 @@ registerIpc({
   },
   importComfyOutput: async (outputPath: string): Promise<AssetImportResponse> => {
     return importComfyOutput(outputPath);
+  },
+  listComfyGallery: async (request?: ComfyGalleryListRequest): Promise<ComfyGalleryListResponse> => {
+    return listComfyGallery(request);
   },
   importWorkflowTemplate: async (workflowId: string): Promise<WorkflowTemplateImportResponse> => {
     return importWorkflowTemplate(workflowId);
