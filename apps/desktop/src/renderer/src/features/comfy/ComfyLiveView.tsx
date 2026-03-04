@@ -15,48 +15,37 @@ export default function ComfyLiveView() {
   }, [comfyBaseUrl]);
 
   return (
-    <div className="h-full p-4 flex flex-col gap-3 bg-[#0b0b10]">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Comfy Live</div>
-          <div className="text-[11px] text-zinc-500 mt-1">ComfyUI nativ in der App (WebView).</div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setReloadKey((k) => k + 1)}
-            className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-900/70 text-[10px] font-black uppercase tracking-wider text-zinc-200"
-          >
-            <span className="inline-flex items-center gap-1"><RefreshCw size={12} /> Reload</span>
-          </button>
-          <button
-            onClick={() => window.open(comfyUrl, "_blank", "noopener,noreferrer")}
-            className="px-3 py-2 rounded-lg border border-blue-500/30 bg-blue-500/10 text-[10px] font-black uppercase tracking-wider text-blue-200"
-          >
-            <span className="inline-flex items-center gap-1"><ExternalLink size={12} /> Open external</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2">
+    <div className="h-full w-full relative bg-black">
+      <div className="absolute top-2 left-2 right-2 z-20 flex items-center gap-2 rounded-lg border border-white/10 bg-black/60 backdrop-blur px-2 py-2">
         <input
           value={comfyBaseUrl}
           onChange={(event) => setComfyBaseUrl(event.target.value)}
           placeholder="Comfy URL, z. B. http://127.0.0.1:8188"
-          className="w-full px-3 py-2 rounded-lg border border-white/10 bg-zinc-950/80 text-[11px] font-mono text-zinc-200"
+          className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-zinc-950/80 text-[11px] font-mono text-zinc-200"
         />
+        <button
+          onClick={() => setReloadKey((k) => k + 1)}
+          className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-900/80 text-[10px] font-black uppercase tracking-wider text-zinc-200"
+        >
+          <span className="inline-flex items-center gap-1"><RefreshCw size={12} /> Reload</span>
+        </button>
+        <button
+          onClick={() => window.open(comfyUrl, "_blank", "noopener,noreferrer")}
+          className="px-3 py-2 rounded-lg border border-blue-500/30 bg-blue-500/20 text-[10px] font-black uppercase tracking-wider text-blue-200"
+        >
+          <span className="inline-flex items-center gap-1"><ExternalLink size={12} /> External</span>
+        </button>
       </div>
 
-      <div className="flex-1 min-h-0 rounded-xl overflow-hidden border border-white/10 bg-black">
-        <webview
-          key={reloadKey}
-          src={comfyUrl}
-          className="w-full h-full"
-          style={{ width: "100%", height: "100%", display: "block" }}
-          autosize={true}
-          allowpopups={true}
-          webpreferences="contextIsolation=yes"
-        />
-      </div>
+      <webview
+        key={reloadKey}
+        src={comfyUrl}
+        className="w-full h-full"
+        style={{ width: "100%", height: "100%", display: "block" }}
+        autosize={true}
+        allowpopups={true}
+        webpreferences="contextIsolation=yes"
+      />
     </div>
   );
 }
