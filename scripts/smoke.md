@@ -76,6 +76,25 @@ npm run dev --workspace @ai-filmstudio/desktop
 - Audio-Input laesst sich mit Audio-Asset verknuepfen
 - `Send to ComfyUI` liefert keinen Typ-Mismatch-Fehler fuer Audio-Input
 
+12. `Preset-Dateimodus Migration`
+- In Projektordner eine Legacy-Datei `workflows/presets.json` mit mindestens 1 Preset anlegen
+- `WF Studio` oeffnen
+- Erwartung: Presets werden geladen
+- Erwartung: Legacy-Backup wird erzeugt: `workflows/presets.migrated.<timestamp>.bak.json`
+- Erwartung: neue Datei entsteht: `workflows/presets/<workflowId>.presets.json`
+
+13. `Preset-Dateimodus Conflict-Guard`
+- `WF Studio` geoeffnet lassen
+- Extern (Dateieditor) dieselbe `*.presets.json` Datei aendern (updatedAt veraendern)
+- In der App Preset speichern
+- Erwartung: klare Meldung zu `PRESET_CONFLICT`
+- Erwartung: UI laedt den externen Stand automatisch neu (kein stilles Ueberschreiben)
+
+14. `Preset-Dateimodus Invalid-File-Warnung`
+- Eine `workflows/presets/<workflowId>.presets.json` absichtlich ungueltig machen (JSON kaputt)
+- App/Tab neu laden
+- Erwartung: Presets laden weiterhin, aber mit Warning-Message zu ignorierten invalid files
+
 ## Dokumentation (Refactor)
 
 Ergebnis in `DOKUMENTATIONEN/Refactor_process.md` eintragen:
