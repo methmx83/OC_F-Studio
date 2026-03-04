@@ -284,7 +284,7 @@ export default function AppShell() {
         </div>
       )}
 
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex overflow-hidden min-h-0">
         {activeView === "studio" ? (
           <div className="flex-1 flex flex-col min-w-0">
             <div className="flex-1 flex overflow-hidden">
@@ -305,7 +305,9 @@ export default function AppShell() {
         ) : activeView === "gallery" ? (
           <ComfyGalleryView />
         ) : activeView === "comfy" ? (
-          <ComfyLiveView />
+          <div className="flex-1 min-w-0 min-h-0">
+            <ComfyLiveView />
+          </div>
         ) : (
           <SettingsView />
         )}
