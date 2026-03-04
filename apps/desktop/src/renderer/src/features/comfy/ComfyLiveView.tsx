@@ -46,12 +46,13 @@ export default function ComfyLiveView() {
         />
       </div>
 
-      <div className="flex-1 rounded-xl overflow-hidden border border-white/10 bg-black">
+      <div className="flex-1 min-h-0 rounded-xl overflow-hidden border border-white/10 bg-black">
         <webview
           key={reloadKey}
           src={comfyUrl}
           className="w-full h-full"
-          style={{ width: "100%", height: "100%", display: "inline-flex" }}
+          style={{ width: "100%", height: "100%", display: "block" }}
+          autosize={true}
           allowpopups={true}
           webpreferences="contextIsolation=yes"
         />
