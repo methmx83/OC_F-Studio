@@ -24,13 +24,29 @@ export class IpcUnavailableError extends Error {
 }
 
 export function isIpcUnavailableError(error: unknown): error is IpcUnavailableError {
-  return error instanceof IpcUnavailableError;
+  if (error instanceof IpcUnavailableError) {
+    return true;
+  }
+
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("reading 'getcomfyhealth'") || message.includes('project api unavailable')) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 type RuntimeProjectApi = Partial<ProjectApiPort> & Omit<ProjectApiPort, never>;
 
 function getRuntimeProjectApi(): RuntimeProjectApi {
-  return getProjectApi() as RuntimeProjectApi;
+  try {
+    const api = getProjectApi() as RuntimeProjectApi | undefined;
+    return api ?? ({} as RuntimeProjectApi);
+  } catch {
+    return {} as RuntimeProjectApi;
+  }
 }
 
 function requireMethod<K extends keyof ProjectApiPort>(
