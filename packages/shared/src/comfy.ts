@@ -1,5 +1,6 @@
 export interface BaseWorkflowRunRequest {
   workflowId: string;
+  workflowTemplateRelativePath?: string;
   width: number;
   height: number;
   fps: number;
@@ -22,7 +23,7 @@ export interface ImageTwoClipsWorkflowRunRequest extends BaseWorkflowRunRequest 
 
 export interface GenericComfyWorkflowRunRequest extends BaseWorkflowRunRequest {
   workflowId: string;
-  [key: string]: string | number;
+  [key: string]: string | number | undefined;
 }
 
 export type KnownComfyWorkflowRunRequest =

@@ -156,20 +156,34 @@ export function resolveComfyBaseUrl(baseUrlOverride?: string): string {
 async function readWorkflowTemplate(
   projectRoot: string,
   workflowId: string,
+  workflowTemplateRelativePath: string | undefined,
   resolveProjectPath: (projectRoot: string, relativePath: string) => string,
 ): Promise<JsonValue> {
   if (!/^[a-zA-Z0-9_-]+$/.test(workflowId)) {
     throw new Error(`Workflow ID "${workflowId}" contains unsupported characters.`);
   }
 
-  const templatePath = resolveProjectPath(projectRoot, path.join('workflows', `${workflowId}.api.json`));
+  const requestedTemplatePath = workflowTemplateRelativePath?.trim();
+  const templateRelativePath = requestedTemplatePath && requestedTemplatePath.length > 0
+    ? requestedTemplatePath.replace(/\\/g, '/')
+    : path.posix.join('workflows', `${workflowId}.api.json`);
+
+  if (path.isAbsolute(templateRelativePath) || templateRelativePath.includes('..')) {
+    throw new Error(`Workflow template path is not allowed: ${templateRelativePath}`);
+  }
+
+  const normalizedRelativePath = templateRelativePath.startsWith('workflows/')
+    ? templateRelativePath
+    : path.posix.join('workflows', templateRelativePath);
+
+  const templatePath = resolveProjectPath(projectRoot, normalizedRelativePath);
   let raw: string;
   try {
     raw = await fs.readFile(templatePath, 'utf-8');
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError.code === 'ENOENT') {
-      throw new Error(`Workflow template missing: workflows/${workflowId}.api.json`);
+      throw new Error(`Workflow template missing: ${normalizedRelativePath}`);
     }
     throw error;
   }
@@ -692,7 +706,12 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
 
       try {
         const project = await options.readCurrentProjectFromDisk();
-        const template = await readWorkflowTemplate(projectRoot, workflowRequest.workflowId, options.resolveProjectPath);
+        const template = await readWorkflowTemplate(
+          projectRoot,
+          workflowRequest.workflowId,
+          workflowRequest.workflowTemplateRelativePath,
+          options.resolveProjectPath,
+        );
         const variables = buildWorkflowTemplateVariables(
           workflowRequest,
           project,

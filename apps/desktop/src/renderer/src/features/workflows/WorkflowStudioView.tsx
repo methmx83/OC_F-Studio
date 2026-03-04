@@ -1163,6 +1163,7 @@ function validate(w: WorkflowCatalogEntry, d: Draft, assets: Asset[]): Validatio
 
   const request: GenericComfyWorkflowRunRequest = {
     workflowId: w.id,
+    workflowTemplateRelativePath: w.templateRelativePath,
     width: nums.width,
     height: nums.height,
     fps: nums.fps,
