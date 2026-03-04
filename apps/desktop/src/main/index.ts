@@ -11,6 +11,7 @@ import type {
   WorkflowPresetItem,
   WorkflowPresetsMap,
   WorkflowPresetsResponse,
+  WorkflowPresetsSaveRequest,
   WorkflowTemplateImportResponse,
 } from '@shared/ipc/project';
 import type { Asset, Project } from '@shared/types';
@@ -394,7 +395,12 @@ async function getWorkflowPresets(): Promise<WorkflowPresetsResponse> {
     if (Object.keys(legacy).length > 0) {
       await backupLegacyWorkflowPresetsIfPresent(projectRoot);
       await writePerWorkflowPresetFiles(projectRoot, legacy, false);
-      return { success: true, message: 'Workflow presets loaded and migrated to per-workflow files.', presets };
+      return {
+        success: true,
+        message: 'Workflow presets loaded and migrated to per-workflow files.',
+        presets,
+        updatedAtByWorkflow: buildWorkflowPresetUpdatedAtByWorkflow(presets),
+      };
     }
   }
 
@@ -403,10 +409,16 @@ async function getWorkflowPresets(): Promise<WorkflowPresetsResponse> {
       success: true,
       message: `Workflow presets loaded with warnings. Invalid files ignored: ${diskRead.invalidFiles.join(', ')}`,
       presets,
+      updatedAtByWorkflow: buildWorkflowPresetUpdatedAtByWorkflow(presets),
     };
   }
 
-  return { success: true, message: 'Workflow presets loaded.', presets };
+  return {
+    success: true,
+    message: 'Workflow presets loaded.',
+    presets,
+    updatedAtByWorkflow: buildWorkflowPresetUpdatedAtByWorkflow(presets),
+  };
 }
 
 async function backupLegacyWorkflowPresetsIfPresent(projectRoot: string): Promise<void> {
@@ -434,20 +446,67 @@ async function backupLegacyWorkflowPresetsIfPresent(projectRoot: string): Promis
   }
 }
 
-async function saveWorkflowPresets(presets: WorkflowPresetsMap): Promise<WorkflowPresetsResponse> {
+function buildWorkflowPresetUpdatedAtByWorkflow(presets: WorkflowPresetsMap): Record<string, string> {
+  const updated: Record<string, string> = {};
+
+  Object.entries(presets).forEach(([workflowId, list]) => {
+    const latestTs = list.reduce((latest, preset) => {
+      const ts = new Date(preset.updatedAt).getTime();
+      if (!Number.isFinite(ts)) {
+        return latest;
+      }
+      return Math.max(latest, ts);
+    }, Number.NEGATIVE_INFINITY);
+
+    if (Number.isFinite(latestTs)) {
+      updated[workflowId] = new Date(latestTs).toISOString();
+    }
+  });
+
+  return updated;
+}
+
+async function saveWorkflowPresets(request: WorkflowPresetsSaveRequest): Promise<WorkflowPresetsResponse> {
   if (!currentProjectRoot) {
     return { success: false, message: 'No ProjectRoot set. Create or load a project first.', presets: {} };
   }
 
   const projectRoot = currentProjectRoot;
   await backupLegacyWorkflowPresetsIfPresent(projectRoot);
-  const normalizedIncoming = normalizeWorkflowPresetsMap(presets);
-  const diskRead = await readWorkflowPresetsFromDisk(projectRoot);
-  const merged = mergeWorkflowPresets(diskRead.presets, normalizedIncoming);
 
+  const normalizedIncoming = normalizeWorkflowPresetsMap(request.presets);
+  const diskRead = await readWorkflowPresetsFromDisk(projectRoot);
+  const diskUpdatedAt = buildWorkflowPresetUpdatedAtByWorkflow(diskRead.presets);
+  const expectedUpdatedAt = request.expectedUpdatedAtByWorkflow ?? {};
+
+  const conflictedWorkflowId = Object.keys(normalizedIncoming).find((workflowId) => {
+    const expected = expectedUpdatedAt[workflowId] ?? '';
+    if (!expected) {
+      return false;
+    }
+
+    const current = diskUpdatedAt[workflowId] ?? '';
+    return current !== expected;
+  });
+
+  if (conflictedWorkflowId) {
+    return {
+      success: false,
+      message: `PRESET_CONFLICT: Workflow "${conflictedWorkflowId}" changed on disk. Reload presets and retry save.`,
+      presets: diskRead.presets,
+      updatedAtByWorkflow: diskUpdatedAt,
+    };
+  }
+
+  const merged = mergeWorkflowPresets(diskRead.presets, normalizedIncoming);
   await writePerWorkflowPresetFiles(projectRoot, merged, true);
 
-  return { success: true, message: 'Workflow presets saved.', presets: merged };
+  return {
+    success: true,
+    message: 'Workflow presets saved.',
+    presets: merged,
+    updatedAtByWorkflow: buildWorkflowPresetUpdatedAtByWorkflow(merged),
+  };
 }
 
 async function saveProjectToCurrentRoot(project: Project): Promise<ProjectResponse> {
@@ -989,8 +1048,8 @@ registerIpc({
   getWorkflowPresets: async (): Promise<WorkflowPresetsResponse> => {
     return getWorkflowPresets();
   },
-  saveWorkflowPresets: async (presets: WorkflowPresetsMap): Promise<WorkflowPresetsResponse> => {
-    return saveWorkflowPresets(presets);
+  saveWorkflowPresets: async (request: WorkflowPresetsSaveRequest): Promise<WorkflowPresetsResponse> => {
+    return saveWorkflowPresets(request);
   },
   getAssetThumbnailDataUrl: async (relativePath: string): Promise<string | null> => {
     return getAssetThumbnailDataUrlService({

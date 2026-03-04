@@ -30,9 +30,15 @@ export interface WorkflowPresetsMap {
   [workflowId: string]: WorkflowPresetItem[];
 }
 
+export interface WorkflowPresetsSaveRequest {
+  presets: WorkflowPresetsMap;
+  expectedUpdatedAtByWorkflow?: Record<string, string>;
+}
+
 export interface WorkflowPresetsResponse {
   success: boolean;
   message: string;
   presets: WorkflowPresetsMap;
+  updatedAtByWorkflow?: Record<string, string>;
 }
 

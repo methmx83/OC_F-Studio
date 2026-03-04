@@ -109,6 +109,7 @@ export default function WorkflowStudioView() {
     }
   });
   const [presetsByWorkflow, setPresetsByWorkflow] = useState<Record<string, WorkflowPreset[]>>({});
+  const [presetUpdatedAtByWorkflow, setPresetUpdatedAtByWorkflow] = useState<Record<string, string>>({});
   const [presetsHydrated, setPresetsHydrated] = useState(false);
   const [isSavingPresets, setIsSavingPresets] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState("");
@@ -166,6 +167,7 @@ export default function WorkflowStudioView() {
     async function hydrateWorkflowPresets(): Promise<void> {
       if (!projectRoot) {
         setPresetsByWorkflow({});
+        setPresetUpdatedAtByWorkflow({});
         setPresetsHydrated(false);
         return;
       }
@@ -176,6 +178,7 @@ export default function WorkflowStudioView() {
         if (isCancelled) return;
         if (response.success) {
           setPresetsByWorkflow(response.presets ?? {});
+          setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
         } else {
           setPresetsByWorkflow({});
           setSendState({ status: "error", message: response.message || "Workflow-Presets konnten nicht geladen werden." });
@@ -208,7 +211,10 @@ export default function WorkflowStudioView() {
       if (!projectRoot || !presetsHydrated) return;
       setIsSavingPresets(true);
       try {
-        const response = await getIpcClient().saveWorkflowPresets(presetsByWorkflow as WorkflowPresetsMap);
+        const response = await getIpcClient().saveWorkflowPresets({
+          presets: presetsByWorkflow as WorkflowPresetsMap,
+          expectedUpdatedAtByWorkflow: presetUpdatedAtByWorkflow,
+        });
         if (isCancelled) return;
         if (response.success) {
           const merged = response.presets ?? {};
@@ -217,6 +223,7 @@ export default function WorkflowStudioView() {
           if (currentJson !== mergedJson) {
             setPresetsByWorkflow(merged);
           }
+          setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
         } else {
           setSendState({ status: "error", message: response.message || "Workflow-Presets konnten nicht gespeichert werden." });
         }
@@ -238,7 +245,7 @@ export default function WorkflowStudioView() {
     return () => {
       isCancelled = true;
     };
-  }, [projectRoot, presetsByWorkflow, presetsHydrated]);
+  }, [presetUpdatedAtByWorkflow, projectRoot, presetsByWorkflow, presetsHydrated]);
 
   useEffect(() => {
     try {

@@ -28,6 +28,7 @@ export type {
   WorkflowPresetItem,
   WorkflowPresetsMap,
   WorkflowPresetsResponse,
+  WorkflowPresetsSaveRequest,
   WorkflowTemplateImportResponse,
 } from './ipc/project.js';
 export type {

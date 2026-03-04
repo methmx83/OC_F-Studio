@@ -3,8 +3,8 @@ import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/ass
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
 import type {
   ProjectResponse,
-  WorkflowPresetsMap,
   WorkflowPresetsResponse,
+  WorkflowPresetsSaveRequest,
   WorkflowTemplateImportResponse,
 } from '@shared/ipc/project';
 import type { Project } from '@shared/types';
@@ -29,7 +29,7 @@ export interface ProjectApiPort {
   importComfyOutput: (outputPath: string) => Promise<AssetImportResponse>;
   importWorkflowTemplate: (workflowId: string) => Promise<WorkflowTemplateImportResponse>;
   getWorkflowPresets: () => Promise<WorkflowPresetsResponse>;
-  saveWorkflowPresets: (presets: WorkflowPresetsMap) => Promise<WorkflowPresetsResponse>;
+  saveWorkflowPresets: (request: WorkflowPresetsSaveRequest) => Promise<WorkflowPresetsResponse>;
   getProjectRoot: () => Promise<string | null>;
   listWorkflowCatalog: () => Promise<WorkflowCatalogResponse>;
   getAssetThumbnailDataUrl: (relativePath: string) => Promise<string | null>;

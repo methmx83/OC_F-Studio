@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@ai-filmstudio/shared';
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
-import type { ProjectResponse, WorkflowPresetsMap, WorkflowPresetsResponse, WorkflowTemplateImportResponse } from '@shared/ipc/project';
+import type { ProjectResponse, WorkflowPresetsResponse, WorkflowPresetsSaveRequest, WorkflowTemplateImportResponse } from '@shared/ipc/project';
 import type { Project } from '@shared/types';
 import type {
   CancelComfyRunRequest,
@@ -30,7 +30,7 @@ export interface RegisterIpcHandlers {
   importComfyOutput: (outputPath: string) => Promise<AssetImportResponse>;
   importWorkflowTemplate: (workflowId: string) => Promise<WorkflowTemplateImportResponse>;
   getWorkflowPresets: () => Promise<WorkflowPresetsResponse>;
-  saveWorkflowPresets: (presets: WorkflowPresetsMap) => Promise<WorkflowPresetsResponse>;
+  saveWorkflowPresets: (request: WorkflowPresetsSaveRequest) => Promise<WorkflowPresetsResponse>;
   getAssetThumbnailDataUrl: (relativePath: string) => Promise<string | null>;
   getAssetFileUrl: (relativePath: string) => Promise<string | null>;
   getAssetMediaDataUrl: (relativePath: string) => Promise<string | null>;
@@ -110,8 +110,8 @@ export function registerIpc(handlers: RegisterIpcHandlers): void {
 
   ipcMain.handle(
     IPC_CHANNELS.project.saveWorkflowPresets,
-    async (_event, presets: WorkflowPresetsMap): Promise<WorkflowPresetsResponse> => {
-      return handlers.saveWorkflowPresets(presets);
+    async (_event, request: WorkflowPresetsSaveRequest): Promise<WorkflowPresetsResponse> => {
+      return handlers.saveWorkflowPresets(request);
     },
   );
 

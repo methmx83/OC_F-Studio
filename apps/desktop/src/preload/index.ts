@@ -5,8 +5,8 @@ import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/ass
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
 import type {
   ProjectResponse,
-  WorkflowPresetsMap,
   WorkflowPresetsResponse,
+  WorkflowPresetsSaveRequest,
   WorkflowTemplateImportResponse,
 } from '@shared/ipc/project';
 import type { Asset, Project } from '@shared/types';
@@ -49,8 +49,8 @@ contextBridge.exposeInMainWorld('projectApi', {
   getWorkflowPresets: async (): Promise<WorkflowPresetsResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.getWorkflowPresets) as Promise<WorkflowPresetsResponse>;
   },
-  saveWorkflowPresets: async (presets: WorkflowPresetsMap): Promise<WorkflowPresetsResponse> => {
-    return ipcRenderer.invoke(IPC_CHANNELS.project.saveWorkflowPresets, presets) as Promise<WorkflowPresetsResponse>;
+  saveWorkflowPresets: async (request: WorkflowPresetsSaveRequest): Promise<WorkflowPresetsResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.saveWorkflowPresets, request) as Promise<WorkflowPresetsResponse>;
   },
   getProjectRoot: async (): Promise<string | null> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.getRoot) as Promise<string | null>;
