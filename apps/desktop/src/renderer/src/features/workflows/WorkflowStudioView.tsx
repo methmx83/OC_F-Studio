@@ -423,8 +423,8 @@ export default function WorkflowStudioView() {
   }
 
   async function onOpenAndCopyComfyUi(): Promise<void> {
-    onOpenInComfyUi();
     await onCopyRenderedPayload();
+    onOpenInComfyUi();
     setShowComfyPasteHint(true);
     window.setTimeout(() => setShowComfyPasteHint(false), 5000);
   }
