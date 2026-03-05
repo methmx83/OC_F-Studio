@@ -15,7 +15,7 @@ export default function ComfyLiveView() {
   }, [comfyBaseUrl]);
 
   return (
-    <div className="absolute inset-0 min-h-0 min-w-0 bg-black overflow-hidden">
+    <div className="fixed top-14 left-0 right-0 bottom-0 min-h-0 min-w-0 bg-black overflow-hidden z-10">
       <div className="absolute top-2 left-2 right-2 z-20 flex items-center gap-2 rounded-lg border border-white/10 bg-black/60 backdrop-blur px-2 py-2">
         <input
           value={comfyBaseUrl}

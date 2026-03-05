@@ -122,156 +122,156 @@ export default function AppShell() {
   return (
     <div className="flex flex-col h-screen bg-[#050506] text-zinc-100 select-none font-sans overflow-hidden">
       <header className="h-14 border-b border-[#1a1a1e] bg-[#0d0d0f] flex items-center justify-between px-6 shrink-0 z-50">
-        <div className="flex items-center gap-8 min-w-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-black text-white italic shadow-lg shadow-blue-500/20">
-              S
+          <div className="flex items-center gap-8 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-black text-white italic shadow-lg shadow-blue-500/20">
+                S
+              </div>
+              <div className="flex flex-col min-w-0">
+                <h1 className="text-[10px] font-black uppercase tracking-[0.2em] text-white">
+                  SceneEditor <span className="text-blue-500">Local</span>
+                </h1>
+                <span className="text-[8px] font-bold text-zinc-600 uppercase tracking-widest flex items-center gap-1 truncate">
+                  <Database size={8} /> {projectName}{isDirty ? " *" : ""}
+                </span>
+              </div>
             </div>
-            <div className="flex flex-col min-w-0">
-              <h1 className="text-[10px] font-black uppercase tracking-[0.2em] text-white">
-                SceneEditor <span className="text-blue-500">Local</span>
-              </h1>
-              <span className="text-[8px] font-bold text-zinc-600 uppercase tracking-widest flex items-center gap-1 truncate">
-                <Database size={8} /> {projectName}{isDirty ? " *" : ""}
-              </span>
-            </div>
-          </div>
 
-          <div className="flex items-center bg-[#050506] rounded-xl p-1 border border-[#1a1a1e]">
-            <NavBtn
-              active={activeView === "studio"}
-              onClick={() => setActiveView("studio")}
-              icon={<Layout size={14} />}
-              label="Studio"
-            />
-            <NavBtn
-              active={activeView === "voice"}
-              onClick={() => setActiveView("voice")}
-              icon={<Mic size={14} />}
-              label="Voice"
-            />
-            <NavBtn
-              active={activeView === "lab"}
-              onClick={() => setActiveView("lab")}
-              icon={<FlaskConical size={14} />}
-              label="WF Studio"
-            />
-            <NavBtn
-              active={activeView === "gallery"}
-              onClick={() => setActiveView("gallery")}
-              icon={<Images size={14} />}
-              label="Gallery"
-            />
-            <NavBtn
-              active={activeView === "comfy"}
-              onClick={() => setActiveView("comfy")}
-              icon={<MonitorPlay size={14} />}
-              label="Comfy Live"
-            />
-            <NavBtn
-              active={activeView === "settings"}
-              onClick={() => setActiveView("settings")}
-              icon={<Settings size={14} />}
-              label="Configs"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 shrink-0">
-          <div className="flex items-center gap-1 bg-[#1a1a1e] rounded-lg p-1 border border-white/5">
-            <button
-              onClick={() => void newProject()}
-              disabled={isProjectBusy}
-              className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white disabled:opacity-30 transition-all"
-              title="New Project"
-            >
-              <FolderPlus size={14} />
-            </button>
-            <button
-              onClick={() => void loadProject()}
-              disabled={isProjectBusy}
-              className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white disabled:opacity-30 transition-all"
-              title="Load Project"
-            >
-              <FolderOpen size={14} />
-            </button>
-            <button
-              onClick={() => void saveProject()}
-              disabled={isProjectBusy || !hasProject}
-              className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white disabled:opacity-30 transition-all"
-              title={hasProject ? "Save Project (Ctrl+S)" : "Load or create a project first"}
-            >
-              <Save size={14} />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-1 bg-[#1a1a1e] rounded-lg p-1 border border-white/5">
-            <button
-              onClick={() => {
-                if (pastCount > 0) {
-                  undoUi();
-                }
-              }}
-              disabled={pastCount === 0}
-              className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-              title="Undo (Ctrl+Z)"
-            >
-              <Undo2 size={14} />
-            </button>
-            <button
-              onClick={() => {
-                if (futureCount > 0) {
-                  redoUi();
-                }
-              }}
-              disabled={futureCount === 0}
-              className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-              title="Redo (Ctrl+Y)"
-            >
-              <Redo2 size={14} />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-4 bg-[#1a1a1e]/50 px-3 py-1.5 rounded-xl border border-white/5">
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-1.5 h-1.5 rounded-full ${
-                  comfyOnline ? "bg-green-500" : "bg-red-500"
-                } animate-pulse`}
+            <div className="flex items-center bg-[#050506] rounded-xl p-1 border border-[#1a1a1e]">
+              <NavBtn
+                active={activeView === "studio"}
+                onClick={() => setActiveView("studio")}
+                icon={<Layout size={14} />}
+                label="Studio"
               />
-              <span className="text-[8px] font-black uppercase text-zinc-500">
-                Comfy Bridge
-              </span>
-            </div>
-            <div className="w-px h-3 bg-zinc-800" />
-            <div className="flex items-center gap-2 text-blue-500">
-              <Cpu size={10} />
-              <span className="text-[8px] font-black uppercase">Local GPU</span>
-            </div>
-            <div className="w-px h-3 bg-zinc-800" />
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-1.5 h-1.5 rounded-full ${
-                  ffmpegStatus.available === null
-                    ? "bg-zinc-500"
-                    : ffmpegStatus.available
-                      ? "bg-emerald-500"
-                      : "bg-red-500"
-                }`}
+              <NavBtn
+                active={activeView === "voice"}
+                onClick={() => setActiveView("voice")}
+                icon={<Mic size={14} />}
+                label="Voice"
               />
-              <span className="text-[8px] font-black uppercase text-zinc-500">
-                FFmpeg {ffmpegStatus.available === null ? "check" : ffmpegStatus.available ? "ready" : "offline"}
-              </span>
+              <NavBtn
+                active={activeView === "lab"}
+                onClick={() => setActiveView("lab")}
+                icon={<FlaskConical size={14} />}
+                label="WF Studio"
+              />
+              <NavBtn
+                active={activeView === "gallery"}
+                onClick={() => setActiveView("gallery")}
+                icon={<Images size={14} />}
+                label="Gallery"
+              />
+              <NavBtn
+                active={false}
+                onClick={() => setActiveView("comfy")}
+                icon={<MonitorPlay size={14} />}
+                label="Comfy Live"
+              />
+              <NavBtn
+                active={activeView === "settings"}
+                onClick={() => setActiveView("settings")}
+                icon={<Settings size={14} />}
+                label="Configs"
+              />
             </div>
           </div>
 
-          <button
-            disabled={isProjectBusy}
-            className="flex items-center gap-2 px-5 py-2 bg-white text-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-200 disabled:opacity-50 transition-all active:scale-95 shadow-xl shadow-white/5"
-          >
-            Render Scene
-          </button>
-        </div>
+          <div className="flex items-center gap-4 shrink-0">
+            <div className="flex items-center gap-1 bg-[#1a1a1e] rounded-lg p-1 border border-white/5">
+              <button
+                onClick={() => void newProject()}
+                disabled={isProjectBusy}
+                className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white disabled:opacity-30 transition-all"
+                title="New Project"
+              >
+                <FolderPlus size={14} />
+              </button>
+              <button
+                onClick={() => void loadProject()}
+                disabled={isProjectBusy}
+                className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white disabled:opacity-30 transition-all"
+                title="Load Project"
+              >
+                <FolderOpen size={14} />
+              </button>
+              <button
+                onClick={() => void saveProject()}
+                disabled={isProjectBusy || !hasProject}
+                className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white disabled:opacity-30 transition-all"
+                title={hasProject ? "Save Project (Ctrl+S)" : "Load or create a project first"}
+              >
+                <Save size={14} />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1 bg-[#1a1a1e] rounded-lg p-1 border border-white/5">
+              <button
+                onClick={() => {
+                  if (pastCount > 0) {
+                    undoUi();
+                  }
+                }}
+                disabled={pastCount === 0}
+                className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 size={14} />
+              </button>
+              <button
+                onClick={() => {
+                  if (futureCount > 0) {
+                    redoUi();
+                  }
+                }}
+                disabled={futureCount === 0}
+                className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                title="Redo (Ctrl+Y)"
+              >
+                <Redo2 size={14} />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-4 bg-[#1a1a1e]/50 px-3 py-1.5 rounded-xl border border-white/5">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    comfyOnline ? "bg-green-500" : "bg-red-500"
+                  } animate-pulse`}
+                />
+                <span className="text-[8px] font-black uppercase text-zinc-500">
+                  Comfy Bridge
+                </span>
+              </div>
+              <div className="w-px h-3 bg-zinc-800" />
+              <div className="flex items-center gap-2 text-blue-500">
+                <Cpu size={10} />
+                <span className="text-[8px] font-black uppercase">Local GPU</span>
+              </div>
+              <div className="w-px h-3 bg-zinc-800" />
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    ffmpegStatus.available === null
+                      ? "bg-zinc-500"
+                      : ffmpegStatus.available
+                        ? "bg-emerald-500"
+                        : "bg-red-500"
+                  }`}
+                />
+                <span className="text-[8px] font-black uppercase text-zinc-500">
+                  FFmpeg {ffmpegStatus.available === null ? "check" : ffmpegStatus.available ? "ready" : "offline"}
+                </span>
+              </div>
+            </div>
+
+            <button
+              disabled={isProjectBusy}
+              className="flex items-center gap-2 px-5 py-2 bg-white text-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-200 disabled:opacity-50 transition-all active:scale-95 shadow-xl shadow-white/5"
+            >
+              Render Scene
+            </button>
+          </div>
       </header>
 
       {lastError && (
