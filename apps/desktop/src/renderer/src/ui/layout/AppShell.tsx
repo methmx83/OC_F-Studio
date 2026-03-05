@@ -305,7 +305,7 @@ export default function AppShell() {
         ) : activeView === "gallery" ? (
           <ComfyGalleryView />
         ) : activeView === "comfy" ? (
-          <div className="flex-1 min-w-0 min-h-0">
+          <div className="flex-1 min-w-0 min-h-0 relative">
             <ComfyLiveView />
           </div>
         ) : (
