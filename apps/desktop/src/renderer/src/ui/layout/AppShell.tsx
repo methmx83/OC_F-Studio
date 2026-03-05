@@ -11,7 +11,6 @@ import {
   Redo2,
   Mic,
   Images,
-  MonitorPlay,
   FolderPlus,
   FolderOpen,
   Save,
@@ -24,7 +23,6 @@ import ComfyPanel from "../../features/comfy/ComfyPanel";
 import TimelineDock from "../../features/timeline/TimelineDock";
 import WorkflowStudioView from "../../features/workflows/WorkflowStudioView";
 import ComfyGalleryView from "../../features/gallery/ComfyGalleryView";
-import ComfyLiveView from "../../features/comfy/ComfyLiveView";
 import { selectAppShellStoreState } from "../../core/store/selectors";
 import { useStudioStore } from "../../core/store/studioStore";
 
@@ -54,7 +52,7 @@ function VoiceView() {
   );
 }
 
-type ActiveView = "studio" | "voice" | "gallery" | "comfy" | "lab" | "settings";
+type ActiveView = "studio" | "voice" | "gallery" | "lab" | "settings";
 
 export default function AppShell() {
   const [activeView, setActiveView] = useState<ActiveView>("studio");
@@ -117,8 +115,6 @@ export default function AppShell() {
     return () => globalThis.removeEventListener("keydown", handleKeyDown);
   }, [futureCount, hasProject, isProjectBusy, pastCount, redoUi, saveProject, undoUi]);
 
-  const isComfyView = activeView === "comfy";
-
   return (
     <div className="flex flex-col h-screen bg-[#050506] text-zinc-100 select-none font-sans overflow-hidden">
       <header className="h-14 border-b border-[#1a1a1e] bg-[#0d0d0f] flex items-center justify-between px-6 shrink-0 z-50">
@@ -161,12 +157,6 @@ export default function AppShell() {
                 onClick={() => setActiveView("gallery")}
                 icon={<Images size={14} />}
                 label="Gallery"
-              />
-              <NavBtn
-                active={false}
-                onClick={() => setActiveView("comfy")}
-                icon={<MonitorPlay size={14} />}
-                label="Comfy Live"
               />
               <NavBtn
                 active={activeView === "settings"}
@@ -306,33 +296,27 @@ export default function AppShell() {
           <WorkflowStudioView />
         ) : activeView === "gallery" ? (
           <ComfyGalleryView />
-        ) : activeView === "comfy" ? (
-          <div className="flex-1 min-w-0 min-h-0 relative">
-            <ComfyLiveView />
-          </div>
         ) : (
           <SettingsView />
         )}
       </main>
 
-      {!isComfyView && (
-        <footer className="h-6 bg-[#0d0d0f] border-t border-[#1a1a1e] px-4 flex items-center justify-between text-[8px] text-zinc-600 font-bold uppercase tracking-[0.2em]">
-          <div className="flex gap-6 items-center">
-            <span className="flex items-center gap-2">
-              <Zap size={10} className="text-yellow-500" /> Neural Pipeline: UI
-            </span>
-            <span className="flex items-center gap-2 truncate max-w-[460px]">
-              <Terminal size={10} /> {projectMessage}
-            </span>
+      <footer className="h-6 bg-[#0d0d0f] border-t border-[#1a1a1e] px-4 flex items-center justify-between text-[8px] text-zinc-600 font-bold uppercase tracking-[0.2em]">
+        <div className="flex gap-6 items-center">
+          <span className="flex items-center gap-2">
+            <Zap size={10} className="text-yellow-500" /> Neural Pipeline: UI
+          </span>
+          <span className="flex items-center gap-2 truncate max-w-[460px]">
+            <Terminal size={10} /> {projectMessage}
+          </span>
+        </div>
+        <div className="flex gap-6 items-center">
+          <span className="text-zinc-500 italic">LOCAL-SHELL</span>
+          <div className="w-24 h-1 bg-zinc-900 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-600 w-1/4" />
           </div>
-          <div className="flex gap-6 items-center">
-            <span className="text-zinc-500 italic">LOCAL-SHELL</span>
-            <div className="w-24 h-1 bg-zinc-900 rounded-full overflow-hidden">
-              <div className="h-full bg-blue-600 w-1/4" />
-            </div>
-          </div>
-        </footer>
-      )}
+        </div>
+      </footer>
     </div>
   );
 }
