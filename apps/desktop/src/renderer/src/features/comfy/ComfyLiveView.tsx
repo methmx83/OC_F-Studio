@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { RefreshCw, ExternalLink } from "lucide-react";
 
 import { useStudioStore } from "../../core/store/studioStore";
@@ -8,6 +8,13 @@ export default function ComfyLiveView() {
   const setComfyBaseUrl = useStudioStore((state) => state.setComfyBaseUrl);
 
   const [reloadKey, setReloadKey] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(() => Math.max(320, window.innerHeight - 56));
+
+  useEffect(() => {
+    const onResize = () => setViewportHeight(Math.max(320, window.innerHeight - 56));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const comfyUrl = useMemo(() => {
     const raw = (comfyBaseUrl || "http://127.0.0.1:8188").trim();
@@ -15,7 +22,7 @@ export default function ComfyLiveView() {
   }, [comfyBaseUrl]);
 
   return (
-    <div className="fixed top-14 left-0 right-0 bottom-0 min-h-0 min-w-0 bg-black overflow-hidden z-10">
+    <div className="fixed top-14 left-0 right-0 min-h-0 min-w-0 bg-black overflow-hidden z-10" style={{ height: `${viewportHeight}px` }}>
       <div className="absolute top-2 left-2 right-2 z-20 flex items-center gap-2 rounded-lg border border-white/10 bg-black/60 backdrop-blur px-2 py-2">
         <input
           value={comfyBaseUrl}
@@ -42,7 +49,7 @@ export default function ComfyLiveView() {
         src={comfyUrl}
         className="w-full h-full"
         style={{ position: "absolute", inset: "0", width: "100%", height: "100%", display: "block" }}
-        allowpopups={true}
+        allowpopups="true"
         webpreferences="contextIsolation=yes"
       />
     </div>
