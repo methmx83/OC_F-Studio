@@ -49,7 +49,6 @@ export default function ComfyLiveView() {
         src={comfyUrl}
         className="w-full h-full"
         style={{ position: "absolute", inset: "0", width: "100%", height: "100%", display: "block" }}
-        allowpopups="true"
         webpreferences="contextIsolation=yes"
       />
     </div>
