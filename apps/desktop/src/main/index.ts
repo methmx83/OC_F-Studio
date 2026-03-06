@@ -9,6 +9,8 @@ import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/ass
 import type {
   ComfyGalleryListRequest,
   ComfyGalleryListResponse,
+  CreateComfyGalleryFolderRequest,
+  CreateComfyGalleryFolderResponse,
   ProjectResponse,
   SavePreviewSnapshotRequest,
   SavePreviewSnapshotResponse,
@@ -843,6 +845,43 @@ async function importComfyOutput(outputPath: string): Promise<AssetImportRespons
   }
 }
 
+async function createComfyGalleryFolder(request: CreateComfyGalleryFolderRequest): Promise<CreateComfyGalleryFolderResponse> {
+  const configured = request.outputDir?.trim() || process.env.COMFYUI_OUTPUT_DIR?.trim() || '';
+  if (!configured) {
+    return { success: false, message: 'Kein Comfy Output Ordner gesetzt.' };
+  }
+
+  const folderName = request.folderName.trim();
+  if (!folderName) {
+    return { success: false, message: 'Ordnername ist leer.' };
+  }
+  if (!/^[a-zA-Z0-9 _.-]+$/.test(folderName)) {
+    return { success: false, message: 'Ordnername enthaelt ungueltige Zeichen.' };
+  }
+
+  const outputDir = path.resolve(configured);
+  const targetPath = path.resolve(outputDir, folderName);
+  const relative = path.relative(outputDir, targetPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    return { success: false, message: 'Ordnerpfad ausserhalb des Output-Ordners ist nicht erlaubt.' };
+  }
+
+  try {
+    const stat = await fs.stat(targetPath).catch(() => null);
+    if (stat) {
+      if (stat.isDirectory()) {
+        return { success: true, message: 'Ordner existiert bereits.', path: targetPath };
+      }
+      return { success: false, message: 'Ein gleichnamiger Dateieintrag existiert bereits.' };
+    }
+
+    await fs.mkdir(targetPath, { recursive: false });
+    return { success: true, message: 'Ordner erstellt.', path: targetPath };
+  } catch (error) {
+    return { success: false, message: `Ordner konnte nicht erstellt werden: ${(error as Error).message}` };
+  }
+}
+
 async function savePreviewSnapshot(request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> {
   if (!currentProjectRoot) {
     return { success: false, message: 'No ProjectRoot set. Create or load a project first.' };
@@ -1189,6 +1228,9 @@ registerIpc({
   },
   savePreviewSnapshot: async (request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> => {
     return savePreviewSnapshot(request);
+  },
+  createComfyGalleryFolder: async (request: CreateComfyGalleryFolderRequest): Promise<CreateComfyGalleryFolderResponse> => {
+    return createComfyGalleryFolder(request);
   },
   importWorkflowTemplate: async (workflowId: string): Promise<WorkflowTemplateImportResponse> => {
     return importWorkflowTemplate(workflowId);

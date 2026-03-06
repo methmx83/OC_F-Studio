@@ -35,6 +35,8 @@ export type {
   ComfyGalleryListResponse,
   SavePreviewSnapshotRequest,
   SavePreviewSnapshotResponse,
+  CreateComfyGalleryFolderRequest,
+  CreateComfyGalleryFolderResponse,
 } from './ipc/project.js';
 export type {
   WorkflowCatalogCategory,

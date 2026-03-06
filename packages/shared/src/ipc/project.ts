@@ -74,3 +74,14 @@ export interface SavePreviewSnapshotResponse {
   path?: string;
 }
 
+export interface CreateComfyGalleryFolderRequest {
+  outputDir?: string;
+  folderName: string;
+}
+
+export interface CreateComfyGalleryFolderResponse {
+  success: boolean;
+  message: string;
+  path?: string;
+}
+

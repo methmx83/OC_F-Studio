@@ -4,6 +4,8 @@ import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
 import type {
   ComfyGalleryListRequest,
   ComfyGalleryListResponse,
+  CreateComfyGalleryFolderRequest,
+  CreateComfyGalleryFolderResponse,
   ProjectResponse,
   SavePreviewSnapshotRequest,
   SavePreviewSnapshotResponse,
@@ -35,6 +37,7 @@ export interface ProjectApiPort {
   importComfyOutput: (outputPath: string) => Promise<AssetImportResponse>;
   listComfyGallery: (request?: ComfyGalleryListRequest) => Promise<ComfyGalleryListResponse>;
   savePreviewSnapshot: (request: SavePreviewSnapshotRequest) => Promise<SavePreviewSnapshotResponse>;
+  createComfyGalleryFolder: (request: CreateComfyGalleryFolderRequest) => Promise<CreateComfyGalleryFolderResponse>;
   importWorkflowTemplate: (workflowId: string) => Promise<WorkflowTemplateImportResponse>;
   getWorkflowPresets: () => Promise<WorkflowPresetsResponse>;
   saveWorkflowPresets: (request: WorkflowPresetsSaveRequest) => Promise<WorkflowPresetsResponse>;

@@ -74,6 +74,7 @@ export default function ComfyGalleryView() {
   const [autoPlaceOnImport, setAutoPlaceOnImport] = useState(true);
   const [importingPath, setImportingPath] = useState<string | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+  const [newFolderName, setNewFolderName] = useState("");
   const [persistedImportedPaths, setPersistedImportedPaths] = useState<Set<string>>(() => readStoredImportedPaths());
 
   useEffect(() => {
@@ -108,6 +109,28 @@ export default function ComfyGalleryView() {
   }, [importStateFilter, importedNames, items, kindFilter, persistedImportedPaths, sortOrder]);
 
   const selectedCount = selectedPaths.size;
+
+  async function createFolder(): Promise<void> {
+    const name = newFolderName.trim();
+    if (!name) {
+      setStatus("Bitte Ordnernamen eingeben.");
+      return;
+    }
+
+    try {
+      const response = await getIpcClient().createComfyGalleryFolder({
+        outputDir,
+        folderName: name,
+      });
+      setStatus(response.message);
+      if (response.success) {
+        setNewFolderName("");
+        await refresh();
+      }
+    } catch (error) {
+      setStatus(`Ordner erstellen fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
   async function refresh(): Promise<void> {
     setLoading(true);
@@ -253,6 +276,21 @@ export default function ComfyGalleryView() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          value={newFolderName}
+          onChange={(event) => setNewFolderName(event.target.value)}
+          placeholder="Neuer Ordnername"
+          className="w-72 px-3 py-2 rounded-lg border border-white/10 bg-zinc-950/70 text-[11px] text-zinc-200"
+        />
+        <button
+          onClick={() => void createFolder()}
+          className="px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-[10px] font-black uppercase tracking-wider text-emerald-200"
+        >
+          Neuer Ordner
+        </button>
       </div>
 
       <div className="flex items-center gap-2 text-[9px]">

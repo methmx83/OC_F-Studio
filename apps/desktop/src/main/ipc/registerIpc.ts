@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@ai-filmstudio/shared';
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
-import type { ComfyGalleryListRequest, ComfyGalleryListResponse, ProjectResponse, SavePreviewSnapshotRequest, SavePreviewSnapshotResponse, WorkflowPresetsResponse, WorkflowPresetsSaveRequest, WorkflowTemplateImportResponse } from '@shared/ipc/project';
+import type { ComfyGalleryListRequest, ComfyGalleryListResponse, CreateComfyGalleryFolderRequest, CreateComfyGalleryFolderResponse, ProjectResponse, SavePreviewSnapshotRequest, SavePreviewSnapshotResponse, WorkflowPresetsResponse, WorkflowPresetsSaveRequest, WorkflowTemplateImportResponse } from '@shared/ipc/project';
 import type { Project } from '@shared/types';
 import type {
   CancelComfyRunRequest,
@@ -33,6 +33,7 @@ export interface RegisterIpcHandlers {
   importComfyOutput: (outputPath: string) => Promise<AssetImportResponse>;
   listComfyGallery: (request?: ComfyGalleryListRequest) => Promise<ComfyGalleryListResponse>;
   savePreviewSnapshot: (request: SavePreviewSnapshotRequest) => Promise<SavePreviewSnapshotResponse>;
+  createComfyGalleryFolder: (request: CreateComfyGalleryFolderRequest) => Promise<CreateComfyGalleryFolderResponse>;
   importWorkflowTemplate: (workflowId: string) => Promise<WorkflowTemplateImportResponse>;
   getWorkflowPresets: () => Promise<WorkflowPresetsResponse>;
   saveWorkflowPresets: (request: WorkflowPresetsSaveRequest) => Promise<WorkflowPresetsResponse>;
@@ -120,6 +121,13 @@ export function registerIpc(handlers: RegisterIpcHandlers): void {
     IPC_CHANNELS.project.savePreviewSnapshot,
     async (_event, request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> => {
       return handlers.savePreviewSnapshot(request);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.project.createComfyGalleryFolder,
+    async (_event, request: CreateComfyGalleryFolderRequest): Promise<CreateComfyGalleryFolderResponse> => {
+      return handlers.createComfyGalleryFolder(request);
     },
   );
 

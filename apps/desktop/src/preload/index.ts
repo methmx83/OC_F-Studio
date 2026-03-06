@@ -6,6 +6,8 @@ import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
 import type {
   ComfyGalleryListRequest,
   ComfyGalleryListResponse,
+  CreateComfyGalleryFolderRequest,
+  CreateComfyGalleryFolderResponse,
   ProjectResponse,
   SavePreviewSnapshotRequest,
   SavePreviewSnapshotResponse,
@@ -54,6 +56,9 @@ contextBridge.exposeInMainWorld('projectApi', {
   },
   savePreviewSnapshot: async (request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.savePreviewSnapshot, request) as Promise<SavePreviewSnapshotResponse>;
+  },
+  createComfyGalleryFolder: async (request: CreateComfyGalleryFolderRequest): Promise<CreateComfyGalleryFolderResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.createComfyGalleryFolder, request) as Promise<CreateComfyGalleryFolderResponse>;
   },
   importWorkflowTemplate: async (workflowId: string): Promise<WorkflowTemplateImportResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.importWorkflowTemplate, workflowId) as Promise<WorkflowTemplateImportResponse>;

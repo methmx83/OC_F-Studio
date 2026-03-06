@@ -11,6 +11,7 @@ export const IPC_CHANNELS = {
     importComfyOutput: 'project:import-comfy-output',
     listComfyGallery: 'project:list-comfy-gallery',
     savePreviewSnapshot: 'project:save-preview-snapshot',
+    createComfyGalleryFolder: 'project:create-comfy-gallery-folder',
     importWorkflowTemplate: 'project:import-workflow-template',
     getWorkflowPresets: 'project:get-workflow-presets',
     saveWorkflowPresets: 'project:save-workflow-presets',
