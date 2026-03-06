@@ -41,15 +41,18 @@ module.exports = [
       'dist/**',
       'build/**',
       'src/**/*.js',
+      'scripts/**/*.mjs',
       '**/*.d.ts',
     ],
   },
   js.configs.recommended,
   {
-    files: ['**/*.config.js', 'tailwind.config.js'],
+    files: ['**/*.config.js', 'tailwind.config.js', 'scripts/**/*.mjs'],
     languageOptions: {
+      sourceType: 'module',
       globals: {
         ...nodeRuntimeGlobals,
+        console: 'readonly',
       },
     },
   },
