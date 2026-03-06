@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@ai-filmstudio/shared';
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
-import type { ComfyGalleryListRequest, ComfyGalleryListResponse, ProjectResponse, WorkflowPresetsResponse, WorkflowPresetsSaveRequest, WorkflowTemplateImportResponse } from '@shared/ipc/project';
+import type { ComfyGalleryListRequest, ComfyGalleryListResponse, ProjectResponse, SavePreviewSnapshotRequest, SavePreviewSnapshotResponse, WorkflowPresetsResponse, WorkflowPresetsSaveRequest, WorkflowTemplateImportResponse } from '@shared/ipc/project';
 import type { Project } from '@shared/types';
 import type {
   CancelComfyRunRequest,
@@ -32,6 +32,7 @@ export interface RegisterIpcHandlers {
   importAudio: () => Promise<AssetImportResponse>;
   importComfyOutput: (outputPath: string) => Promise<AssetImportResponse>;
   listComfyGallery: (request?: ComfyGalleryListRequest) => Promise<ComfyGalleryListResponse>;
+  savePreviewSnapshot: (request: SavePreviewSnapshotRequest) => Promise<SavePreviewSnapshotResponse>;
   importWorkflowTemplate: (workflowId: string) => Promise<WorkflowTemplateImportResponse>;
   getWorkflowPresets: () => Promise<WorkflowPresetsResponse>;
   saveWorkflowPresets: (request: WorkflowPresetsSaveRequest) => Promise<WorkflowPresetsResponse>;
@@ -112,6 +113,13 @@ export function registerIpc(handlers: RegisterIpcHandlers): void {
     IPC_CHANNELS.project.listComfyGallery,
     async (_event, request?: ComfyGalleryListRequest): Promise<ComfyGalleryListResponse> => {
       return handlers.listComfyGallery(request);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.project.savePreviewSnapshot,
+    async (_event, request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> => {
+      return handlers.savePreviewSnapshot(request);
     },
   );
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, ChevronLeft, ChevronRight, Scissors, Trash2, X, Minus } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Scissors, Trash2, X, Minus, Camera } from "lucide-react";
 import type { Timeline, Track } from "@shared/types";
 
 import { useShallow } from "zustand/shallow";
@@ -604,6 +604,13 @@ export default function TimelineDock() {
                 </button>
               </>
             )}
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("afs:timeline-snapshot"))}
+              className="p-1.5 rounded-lg bg-zinc-900/40 border border-white/5 text-zinc-400 hover:text-emerald-300 transition-all"
+              title="Snapshot am Playhead speichern"
+            >
+              <Camera size={14} />
+            </button>
             <button
               disabled={!isClipSelected}
               onClick={() => trimSelectedClip(0.1, 0)}

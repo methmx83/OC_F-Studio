@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 import type { CancelComfyRunRequest, CancelComfyRunResponse, ComfyHealthRequest, ComfyHealthResponse, ComfyRunEvent, PreviewComfyRunPayloadRequest, PreviewComfyRunPayloadResponse, QueueComfyRunRequest, QueueComfyRunResponse } from '@shared/comfy';
-import type { ComfyGalleryListRequest, ComfyGalleryListResponse, WorkflowTemplateImportResponse } from '@shared/ipc/project';
+import type { ComfyGalleryListRequest, ComfyGalleryListResponse, SavePreviewSnapshotRequest, SavePreviewSnapshotResponse, WorkflowTemplateImportResponse } from '@shared/ipc/project';
 import {
   getProjectApi,
   type ProjectApiPort,
@@ -76,6 +76,10 @@ export function getIpcClient(): IpcClient {
     importComfyOutput: (outputPath) => requireMethod(api, 'importComfyOutput', PROJECT_API_UNAVAILABLE_MESSAGE)(outputPath),
     listComfyGallery: async (request?: ComfyGalleryListRequest): Promise<ComfyGalleryListResponse> => {
       const method = requireMethod(api, 'listComfyGallery', PROJECT_API_UNAVAILABLE_MESSAGE);
+      return method(request);
+    },
+    savePreviewSnapshot: async (request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> => {
+      const method = requireMethod(api, 'savePreviewSnapshot', PROJECT_API_UNAVAILABLE_MESSAGE);
       return method(request);
     },
     importWorkflowTemplate: async (workflowId: string): Promise<WorkflowTemplateImportResponse> => {

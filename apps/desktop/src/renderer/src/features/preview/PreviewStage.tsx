@@ -45,6 +45,7 @@ export default function PreviewStage() {
   const rafRef = useRef<number | null>(null);
   const lastTickRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioElementByClipIdRef = useRef<Record<string, HTMLAudioElement | null>>({});
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -474,6 +475,64 @@ export default function PreviewStage() {
     setMediaError(toVideoErrorMessage(error, activeAsset?.originalName ?? "Video"));
   };
 
+  useEffect(() => {
+    const handleSnapshotRequest = async () => {
+      if (!activeAsset || activeAsset.type === "audio") {
+        setMediaError("Snapshot nur bei Bild/Video moeglich.");
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 1280;
+      canvas.height = 720;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        setMediaError("Snapshot-Kontext konnte nicht erstellt werden.");
+        return;
+      }
+
+      context.fillStyle = "#000";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (activeAsset.type === "video") {
+        const video = videoRef.current;
+        if (!video || video.readyState < 2) {
+          setMediaError("Video ist noch nicht bereit fuer Snapshot.");
+          return;
+        }
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      } else {
+        const image = imageRef.current;
+        if (!image || !image.complete) {
+          setMediaError("Bild ist noch nicht bereit fuer Snapshot.");
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      }
+
+      const dataUrl = canvas.toDataURL("image/png");
+      const response = await getIpcClient().savePreviewSnapshot({
+        dataUrl,
+        timeSeconds: currentTime,
+        sourceName: activeAsset.originalName,
+      });
+
+      if (!response.success) {
+        setMediaError(response.message || "Snapshot speichern fehlgeschlagen.");
+        return;
+      }
+
+      setMediaError(null);
+    };
+
+    const onSnapshot = () => {
+      void handleSnapshotRequest();
+    };
+
+    window.addEventListener("afs:timeline-snapshot", onSnapshot);
+    return () => window.removeEventListener("afs:timeline-snapshot", onSnapshot);
+  }, [activeAsset, currentTime]);
+
   return (
     <div className="h-full flex flex-col bg-[#050506]">
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1e] bg-[#0d0d0f]">
@@ -616,6 +675,7 @@ export default function PreviewStage() {
 
           {activeAsset && activeAssetFileUrl && activeAsset.type === "image" && (
             <img
+              ref={imageRef}
               src={activeAssetFileUrl}
               alt={activeAsset.originalName}
               className="w-full h-full object-contain"

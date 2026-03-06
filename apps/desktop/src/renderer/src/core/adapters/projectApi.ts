@@ -5,6 +5,8 @@ import type {
   ComfyGalleryListRequest,
   ComfyGalleryListResponse,
   ProjectResponse,
+  SavePreviewSnapshotRequest,
+  SavePreviewSnapshotResponse,
   WorkflowPresetsResponse,
   WorkflowPresetsSaveRequest,
   WorkflowTemplateImportResponse,
@@ -32,6 +34,7 @@ export interface ProjectApiPort {
   importAudio: () => Promise<AssetImportResponse>;
   importComfyOutput: (outputPath: string) => Promise<AssetImportResponse>;
   listComfyGallery: (request?: ComfyGalleryListRequest) => Promise<ComfyGalleryListResponse>;
+  savePreviewSnapshot: (request: SavePreviewSnapshotRequest) => Promise<SavePreviewSnapshotResponse>;
   importWorkflowTemplate: (workflowId: string) => Promise<WorkflowTemplateImportResponse>;
   getWorkflowPresets: () => Promise<WorkflowPresetsResponse>;
   saveWorkflowPresets: (request: WorkflowPresetsSaveRequest) => Promise<WorkflowPresetsResponse>;

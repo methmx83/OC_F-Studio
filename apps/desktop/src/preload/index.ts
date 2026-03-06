@@ -7,6 +7,8 @@ import type {
   ComfyGalleryListRequest,
   ComfyGalleryListResponse,
   ProjectResponse,
+  SavePreviewSnapshotRequest,
+  SavePreviewSnapshotResponse,
   WorkflowPresetsResponse,
   WorkflowPresetsSaveRequest,
   WorkflowTemplateImportResponse,
@@ -49,6 +51,9 @@ contextBridge.exposeInMainWorld('projectApi', {
   },
   listComfyGallery: async (request?: ComfyGalleryListRequest): Promise<ComfyGalleryListResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.listComfyGallery, request) as Promise<ComfyGalleryListResponse>;
+  },
+  savePreviewSnapshot: async (request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.savePreviewSnapshot, request) as Promise<SavePreviewSnapshotResponse>;
   },
   importWorkflowTemplate: async (workflowId: string): Promise<WorkflowTemplateImportResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.importWorkflowTemplate, workflowId) as Promise<WorkflowTemplateImportResponse>;

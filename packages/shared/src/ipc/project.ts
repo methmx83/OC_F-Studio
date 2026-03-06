@@ -62,3 +62,15 @@ export interface ComfyGalleryListResponse {
   items: ComfyGalleryItem[];
 }
 
+export interface SavePreviewSnapshotRequest {
+  dataUrl: string;
+  timeSeconds: number;
+  sourceName?: string;
+}
+
+export interface SavePreviewSnapshotResponse {
+  success: boolean;
+  message: string;
+  path?: string;
+}
+

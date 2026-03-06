@@ -10,6 +10,8 @@ import type {
   ComfyGalleryListRequest,
   ComfyGalleryListResponse,
   ProjectResponse,
+  SavePreviewSnapshotRequest,
+  SavePreviewSnapshotResponse,
   WorkflowPresetItem,
   WorkflowPresetsMap,
   WorkflowPresetsResponse,
@@ -841,6 +843,47 @@ async function importComfyOutput(outputPath: string): Promise<AssetImportRespons
   }
 }
 
+async function savePreviewSnapshot(request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> {
+  if (!currentProjectRoot) {
+    return { success: false, message: 'No ProjectRoot set. Create or load a project first.' };
+  }
+
+  const dataUrl = request.dataUrl?.trim();
+  if (!dataUrl || !dataUrl.startsWith('data:image/png;base64,')) {
+    return { success: false, message: 'Invalid snapshot payload.' };
+  }
+
+  const base64 = dataUrl.slice('data:image/png;base64,'.length);
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(base64, 'base64');
+  } catch {
+    return { success: false, message: 'Failed to decode snapshot payload.' };
+  }
+
+  const safeSource = (request.sourceName ?? 'preview')
+    .replace(/[^a-z0-9_\-.]+/gi, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 60) || 'preview';
+  const timeCode = Math.max(0, Number.isFinite(request.timeSeconds) ? request.timeSeconds : 0)
+    .toFixed(2)
+    .replace('.', '_');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+  const targetDir = resolveProjectPath(currentProjectRoot, path.join('exports', 'snapshots'));
+  await fs.mkdir(targetDir, { recursive: true });
+
+  const fileName = `${safeSource}_t${timeCode}_${stamp}.png`;
+  const targetPath = path.join(targetDir, fileName);
+  await fs.writeFile(targetPath, buffer);
+
+  return {
+    success: true,
+    message: 'Snapshot gespeichert.',
+    path: targetPath,
+  };
+}
+
 async function importWorkflowTemplate(workflowId: string): Promise<WorkflowTemplateImportResponse> {
   if (!currentProjectRoot) {
     return { success: false, message: 'No ProjectRoot set. Create or load a project first.' };
@@ -1143,6 +1186,9 @@ registerIpc({
   },
   listComfyGallery: async (request?: ComfyGalleryListRequest): Promise<ComfyGalleryListResponse> => {
     return listComfyGallery(request);
+  },
+  savePreviewSnapshot: async (request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> => {
+    return savePreviewSnapshot(request);
   },
   importWorkflowTemplate: async (workflowId: string): Promise<WorkflowTemplateImportResponse> => {
     return importWorkflowTemplate(workflowId);

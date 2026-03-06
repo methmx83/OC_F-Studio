@@ -33,6 +33,8 @@ export type {
   ComfyGalleryItem,
   ComfyGalleryListRequest,
   ComfyGalleryListResponse,
+  SavePreviewSnapshotRequest,
+  SavePreviewSnapshotResponse,
 } from './ipc/project.js';
 export type {
   WorkflowCatalogCategory,
