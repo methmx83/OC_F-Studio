@@ -95,6 +95,18 @@ npm run dev --workspace @ai-filmstudio/desktop
 - App/Tab neu laden
 - Erwartung: Presets laden weiterhin, aber mit Warning-Message zu ignorierten invalid files
 
+15. `Preset-Konflikt UX End-Check`
+- Workflow Studio offen lassen und Preset bearbeiten
+- Dieselbe Preset-Datei extern aendern (updatedAt/feldwerte)
+- In der App Speichern ausloesen
+- Erwartung: sichtbare `Preset Conflict`-Karte mit Aktion `Neu laden`
+- Klick auf `Neu laden`
+- Erwartung: Presets werden erfolgreich resynct, Konfliktkarte verschwindet, weiterer Save moeglich
+
+16. `Preset-Storage Guard (CI lokal)`
+- `npm run validate:preset-storage --workspace @ai-filmstudio/desktop`
+- Erwartung: Skript grün; bei Browser-Storage-Rueckfall fuer Presets harter Fehler
+
 ## Dokumentation (Refactor)
 
 Ergebnis in `DOKUMENTATIONEN/Refactor_process.md` eintragen:
