@@ -316,8 +316,14 @@ export default function WorkflowStudioView() {
     setDrafts((prev) => ({ ...prev, [selected.id]: fn(mergeDraft(selected, prev[selected.id])) }));
   };
 
-  const onNum = (key: NumKey, value: string) => patchDraft((d) => ({ ...d, settings: { ...d.settings, [key]: value } }));
-  const onInput = (key: string, value: string) => patchDraft((d) => ({ ...d, inputs: { ...d.inputs, [key]: value } }));
+  const onNum = (key: NumKey, value: string) => {
+    setPresetConflictMessage(null);
+    patchDraft((d) => ({ ...d, settings: { ...d.settings, [key]: value } }));
+  };
+  const onInput = (key: string, value: string) => {
+    setPresetConflictMessage(null);
+    patchDraft((d) => ({ ...d, inputs: { ...d.inputs, [key]: value } }));
+  };
 
   function onSavePreset(): void {
     if (!selected || !draft) return;
@@ -342,6 +348,7 @@ export default function WorkflowStudioView() {
       setSelectedPresetId(nextPreset.id);
       return { ...prev, [selected.id]: nextList.slice(0, 20) };
     });
+    setPresetConflictMessage(null);
     setSendState({ status: "success", message: "Preset gespeichert." });
   }
 
@@ -350,6 +357,7 @@ export default function WorkflowStudioView() {
     const preset = workflowPresets.find((p) => p.id === selectedPresetId);
     if (!preset) return;
     setDrafts((prev) => ({ ...prev, [selected.id]: mergeDraft(selected, preset.draft) }));
+    setPresetConflictMessage(null);
     setSendState({ status: "success", message: `Preset "${preset.name}" angewendet.` });
   }
 
@@ -361,6 +369,7 @@ export default function WorkflowStudioView() {
     });
     setSelectedPresetId("");
     setPresetName("");
+    setPresetConflictMessage(null);
     setSendState({ status: "success", message: "Preset geloescht." });
   }
 
