@@ -10,6 +10,7 @@
     "pretypecheck": "npm run clean:emitted-js",
     "prebuild": "npm run clean:emitted-js",
     "prelint": "npm run clean:emitted-js",
+    "validate:preset-storage": "node ./scripts/validate-preset-storage.mjs",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "preview": "electron-vite preview",
