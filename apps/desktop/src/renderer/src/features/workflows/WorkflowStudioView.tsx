@@ -113,6 +113,7 @@ export default function WorkflowStudioView() {
   const [presetsByWorkflow, setPresetsByWorkflow] = useState<Record<string, WorkflowPreset[]>>({});
   const [presetUpdatedAtByWorkflow, setPresetUpdatedAtByWorkflow] = useState<Record<string, string>>({});
   const [presetLoadWarning, setPresetLoadWarning] = useState<string | null>(null);
+  const [presetConflictMessage, setPresetConflictMessage] = useState<string | null>(null);
   const [presetsHydrated, setPresetsHydrated] = useState(false);
   const [isSavingPresets, setIsSavingPresets] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState("");
@@ -184,6 +185,7 @@ export default function WorkflowStudioView() {
           setPresetsByWorkflow(response.presets ?? {});
           setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
           setPresetLoadWarning((response.message || "").includes("with warnings") ? response.message : null);
+          setPresetConflictMessage(null);
         } else {
           setPresetsByWorkflow({});
           setPresetLoadWarning(null);
@@ -224,6 +226,7 @@ export default function WorkflowStudioView() {
         });
         if (isCancelled) return;
         if (response.success) {
+          setPresetConflictMessage(null);
           const merged = response.presets ?? {};
           const currentJson = JSON.stringify(presetsByWorkflow);
           const mergedJson = JSON.stringify(merged);
@@ -235,9 +238,11 @@ export default function WorkflowStudioView() {
           if ((response.message || "").includes("PRESET_CONFLICT")) {
             setPresetsByWorkflow(response.presets ?? {});
             setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
+            const conflictMessage = "Preset-Konflikt erkannt: Datei wurde extern geaendert. Stand wurde neu geladen, bitte Aenderung erneut speichern.";
+            setPresetConflictMessage(conflictMessage);
             setSendState({
               status: "error",
-              message: "Preset-Konflikt erkannt: Datei wurde extern geaendert. Stand wurde neu geladen, bitte Aenderung erneut speichern.",
+              message: conflictMessage,
             });
           } else {
             setSendState({ status: "error", message: response.message || "Workflow-Presets konnten nicht gespeichert werden." });
@@ -427,6 +432,31 @@ export default function WorkflowStudioView() {
     onOpenInComfyUi();
     setShowComfyPasteHint(true);
     window.setTimeout(() => setShowComfyPasteHint(false), 5000);
+  }
+
+  async function onReloadWorkflowPresets(): Promise<void> {
+    if (!projectRoot) {
+      return;
+    }
+
+    try {
+      const response = await getIpcClient().getWorkflowPresets();
+      if (!response.success) {
+        setSendState({ status: "error", message: response.message || "Workflow-Presets konnten nicht neu geladen werden." });
+        return;
+      }
+
+      setPresetsByWorkflow(response.presets ?? {});
+      setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
+      setPresetLoadWarning((response.message || "").includes("with warnings") ? response.message : null);
+      setPresetConflictMessage(null);
+      setSendState({ status: "success", message: "Workflow-Presets neu geladen." });
+    } catch (error) {
+      setSendState({
+        status: "error",
+        message: `Workflow-Presets neu laden fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
   }
 
   async function onImportOutput(outputPath: string): Promise<void> {
@@ -892,6 +922,23 @@ export default function WorkflowStudioView() {
                   <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-[10px] text-amber-200">
                     <div className="font-black uppercase tracking-wider text-[9px]">Preset Warning</div>
                     <div className="mt-1 text-amber-100/90">{presetLoadWarning}</div>
+                  </div>
+                )}
+
+                {presetConflictMessage && (
+                  <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-[10px] text-red-200">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="font-black uppercase tracking-wider text-[9px]">Preset Conflict</div>
+                        <div className="mt-1 text-red-100/90">{presetConflictMessage}</div>
+                      </div>
+                      <button
+                        onClick={() => { void onReloadWorkflowPresets(); }}
+                        className="px-2 py-1 rounded-md border border-red-300/30 bg-red-400/15 text-[8px] font-black uppercase tracking-wider text-red-100"
+                      >
+                        Neu laden
+                      </button>
+                    </div>
                   </div>
                 )}
 
