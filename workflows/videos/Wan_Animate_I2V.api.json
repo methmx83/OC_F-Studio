@@ -840,14 +840,14 @@
     "inputs": {
       "frame_rate": "{{fps}}",
       "loop_count": 0,
-      "filename_prefix": "NEU/WSG_",
+      "filename_prefix": "FILMSTUDIO/I2V_",
       "format": "video/h264-mp4",
       "pix_fmt": "yuv420p",
       "crf": 19,
       "save_metadata": true,
       "trim_to_audio": false,
       "pingpong": false,
-      "save_output": false,
+      "save_output": true,
       "images": [
         "310",
         0
@@ -957,7 +957,7 @@
     "inputs": {
       "lora1": "Wan_2_I2V\\wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
       "strength1": 0.7,
-      "lora2": "lightx2v\\lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
+      "lora2": "lightx2v\\lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors",
       "strength2": 0.6,
       "lora3": "Wan_mmx\\wan2.1_i2v-mmx_face_000001500.safetensors",
       "strength3": 0.4,
