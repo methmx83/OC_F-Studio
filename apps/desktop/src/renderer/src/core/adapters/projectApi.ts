@@ -2,11 +2,17 @@
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
 import type {
+  AnalyzeImageWithOllamaRequest,
+  AnalyzeImageWithOllamaResponse,
   ComfyGalleryListRequest,
   ComfyGalleryListResponse,
   CreateComfyGalleryFolderRequest,
   CreateComfyGalleryFolderResponse,
+  ProjectAutosaveListResponse,
   ProjectResponse,
+  RevealPreviewSnapshotRequest,
+  RevealPreviewSnapshotResponse,
+  SaveProjectReason,
   SavePreviewSnapshotRequest,
   SavePreviewSnapshotResponse,
   WorkflowPresetsResponse,
@@ -30,13 +36,17 @@ import type { WorkflowCatalogResponse } from '@shared/workflows';
 export interface ProjectApiPort {
   newProject: () => Promise<ProjectResponse>;
   loadProject: () => Promise<ProjectResponse>;
-  saveProject: (project: Project) => Promise<ProjectResponse>;
+  restoreLastSession: () => Promise<ProjectResponse>;
+  listProjectAutosaves: () => Promise<ProjectAutosaveListResponse>;
+  restoreProjectAutosave: (fileName: string) => Promise<ProjectResponse>;
+  saveProject: (project: Project, reason?: SaveProjectReason) => Promise<ProjectResponse>;
   importVideo: () => Promise<AssetImportResponse>;
   importImage: () => Promise<AssetImportResponse>;
   importAudio: () => Promise<AssetImportResponse>;
   importComfyOutput: (outputPath: string) => Promise<AssetImportResponse>;
   listComfyGallery: (request?: ComfyGalleryListRequest) => Promise<ComfyGalleryListResponse>;
   savePreviewSnapshot: (request: SavePreviewSnapshotRequest) => Promise<SavePreviewSnapshotResponse>;
+  revealPreviewSnapshot: (request: RevealPreviewSnapshotRequest) => Promise<RevealPreviewSnapshotResponse>;
   createComfyGalleryFolder: (request: CreateComfyGalleryFolderRequest) => Promise<CreateComfyGalleryFolderResponse>;
   importWorkflowTemplate: (workflowId: string) => Promise<WorkflowTemplateImportResponse>;
   getWorkflowPresets: () => Promise<WorkflowPresetsResponse>;
@@ -49,6 +59,7 @@ export interface ProjectApiPort {
   getFfmpegHealth: () => Promise<FfmpegHealthResponse>;
   ensureVideoProxy: (relativeVideoPath: string) => Promise<ProxyResponse>;
   getAudioWaveformPeaks: (relativeAudioPath: string, bins: number) => Promise<AudioWaveformResponse>;
+  analyzeImageWithOllama: (request: AnalyzeImageWithOllamaRequest) => Promise<AnalyzeImageWithOllamaResponse>;
   getComfyHealth: (request?: ComfyHealthRequest) => Promise<ComfyHealthResponse>;
   queueComfyRun: (payload: QueueComfyRunRequest) => Promise<QueueComfyRunResponse>;
   previewComfyRunPayload: (payload: PreviewComfyRunPayloadRequest) => Promise<PreviewComfyRunPayloadResponse>;

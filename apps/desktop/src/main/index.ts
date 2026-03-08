@@ -2,16 +2,23 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { app, BrowserWindow, dialog } from 'electron';
+import { app, BrowserWindow, dialog, shell } from 'electron';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { IPC_CHANNELS } from '@ai-filmstudio/shared';
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type {
+  AnalyzeImageWithOllamaRequest,
+  AnalyzeImageWithOllamaResponse,
   ComfyGalleryListRequest,
   ComfyGalleryListResponse,
   CreateComfyGalleryFolderRequest,
   CreateComfyGalleryFolderResponse,
+  ProjectSnapshotReason,
+  ProjectAutosaveListResponse,
   ProjectResponse,
+  RevealPreviewSnapshotRequest,
+  RevealPreviewSnapshotResponse,
+  SaveProjectReason,
   SavePreviewSnapshotRequest,
   SavePreviewSnapshotResponse,
   WorkflowPresetItem,
@@ -61,12 +68,20 @@ const validateProject = ajv.compile<Project>(projectSchema);
 const PROJECT_FILE_NAME = 'project.json';
 const WORKFLOW_PRESETS_LEGACY_RELATIVE_PATH = path.join('workflows', 'presets.json');
 const WORKFLOW_PRESETS_DIRECTORY_RELATIVE_PATH = path.join('workflows', 'presets');
+const AUTOSAVE_DIRECTORY_RELATIVE_PATH = path.join('cache', 'autosave');
+const AUTOSAVE_FILE_PREFIX = 'project.autosave.';
+const AUTOSAVE_FILE_SUFFIX = '.json';
+const MAX_AUTOSAVE_SNAPSHOTS = 20;
+const SESSION_STATE_FILE_NAME = 'scene-editor.session.json';
 const COMFY_RUN_EVENT_CHANNEL = IPC_CHANNELS.comfy.runEvent;
 
 let currentProjectRoot: string | null = null;
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+interface SessionState {
+  lastProjectRoot?: string;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -156,6 +171,41 @@ function runMigrationSanityCheck(): void {
 
 function resolveProjectPath(projectRoot: string, relativePath: string): string {
   return path.join(projectRoot, relativePath);
+}
+
+function resolveSessionStatePath(): string {
+  return path.join(app.getPath('userData'), SESSION_STATE_FILE_NAME);
+}
+
+async function readSessionState(): Promise<SessionState> {
+  try {
+    const raw = await fs.readFile(resolveSessionStatePath(), 'utf-8');
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed)) {
+      return {};
+    }
+
+    const lastProjectRoot = typeof parsed.lastProjectRoot === 'string'
+      ? parsed.lastProjectRoot.trim()
+      : '';
+    return lastProjectRoot ? { lastProjectRoot } : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeSessionState(state: SessionState): Promise<void> {
+  const filePath = resolveSessionStatePath();
+  try {
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(state, null, 2), 'utf-8');
+  } catch {
+    // Session persistence is best-effort only.
+  }
+}
+
+async function persistLastProjectRoot(projectRoot: string): Promise<void> {
+  await writeSessionState({ lastProjectRoot: projectRoot });
 }
 
 function createWindow(): void {
@@ -517,7 +567,171 @@ async function saveWorkflowPresets(request: WorkflowPresetsSaveRequest): Promise
   };
 }
 
-async function saveProjectToCurrentRoot(project: Project): Promise<ProjectResponse> {
+function parseAutosaveFileName(fileName: string): { reason: ProjectSnapshotReason; stamp: string } | null {
+  if (!fileName.startsWith(AUTOSAVE_FILE_PREFIX) || !fileName.endsWith(AUTOSAVE_FILE_SUFFIX)) {
+    return null;
+  }
+  if (fileName.includes('/') || fileName.includes('\\')) {
+    return null;
+  }
+
+  const payload = fileName.slice(AUTOSAVE_FILE_PREFIX.length, fileName.length - AUTOSAVE_FILE_SUFFIX.length);
+  if (!payload) {
+    return null;
+  }
+
+  const parts = payload.split('.');
+  const head = parts[0];
+  if ((head === 'manual' || head === 'autosave') && parts.length > 1) {
+    return {
+      reason: head,
+      stamp: parts.slice(1).join('.'),
+    };
+  }
+
+  return {
+    reason: 'unknown',
+    stamp: payload,
+  };
+}
+
+async function writeProjectAutosaveSnapshot(projectRoot: string, project: Project, reason: SaveProjectReason): Promise<void> {
+  const autosaveDirectory = resolveProjectPath(projectRoot, AUTOSAVE_DIRECTORY_RELATIVE_PATH);
+  await fs.mkdir(autosaveDirectory, { recursive: true });
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const fileName = `${AUTOSAVE_FILE_PREFIX}${reason}.${stamp}${AUTOSAVE_FILE_SUFFIX}`;
+  const snapshotPath = path.join(autosaveDirectory, fileName);
+  await fs.writeFile(snapshotPath, JSON.stringify(project, null, 2), 'utf-8');
+
+  try {
+    const entries = await fs.readdir(autosaveDirectory, { withFileTypes: true });
+    const snapshotFileNames = entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => parseAutosaveFileName(name) !== null)
+      .sort((a, b) => b.localeCompare(a));
+
+    const staleFileNames = snapshotFileNames.slice(MAX_AUTOSAVE_SNAPSHOTS);
+    if (staleFileNames.length > 0) {
+      await Promise.all(staleFileNames.map(async (name) => fs.unlink(path.join(autosaveDirectory, name))));
+    }
+  } catch {
+    // Snapshot pruning is best-effort only.
+  }
+}
+
+function isValidAutosaveFileName(fileName: string): boolean {
+  return parseAutosaveFileName(fileName) !== null;
+}
+
+async function listProjectAutosaves(): Promise<ProjectAutosaveListResponse> {
+  if (!currentProjectRoot) {
+    return {
+      success: false,
+      message: 'No ProjectRoot set. Create or load a project first.',
+      snapshots: [],
+    };
+  }
+
+  const autosaveDirectory = resolveProjectPath(currentProjectRoot, AUTOSAVE_DIRECTORY_RELATIVE_PATH);
+  try {
+    const entries = await fs.readdir(autosaveDirectory, { withFileTypes: true });
+    const snapshots = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile())
+        .map(async (entry) => {
+          const fileName = entry.name;
+          if (!isValidAutosaveFileName(fileName)) {
+            return null;
+          }
+
+          const parsed = parseAutosaveFileName(fileName);
+          if (!parsed) {
+            return null;
+          }
+
+          const absolutePath = path.join(autosaveDirectory, fileName);
+          const stat = await fs.stat(absolutePath);
+          return {
+            fileName,
+            createdAt: stat.mtime.toISOString(),
+            sizeBytes: stat.size,
+            reason: parsed.reason,
+          };
+        }),
+    );
+
+    const sortedSnapshots = snapshots
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    return {
+      success: true,
+      message: sortedSnapshots.length > 0 ? 'Autosave snapshots loaded.' : 'No autosave snapshots available yet.',
+      snapshots: sortedSnapshots,
+    };
+  } catch {
+    return {
+      success: true,
+      message: 'No autosave snapshots available yet.',
+      snapshots: [],
+    };
+  }
+}
+
+async function restoreProjectAutosave(fileName: string): Promise<ProjectResponse> {
+  if (!currentProjectRoot) {
+    return {
+      success: false,
+      message: 'No ProjectRoot set. Create or load a project first.',
+    };
+  }
+
+  const trimmed = fileName.trim();
+  if (!isValidAutosaveFileName(trimmed)) {
+    return { success: false, message: `Invalid autosave file name: ${fileName}` };
+  }
+
+  const projectRoot = currentProjectRoot;
+  const autosaveDirectory = resolveProjectPath(projectRoot, AUTOSAVE_DIRECTORY_RELATIVE_PATH);
+  const snapshotPath = path.join(autosaveDirectory, trimmed);
+  if (!existsSync(snapshotPath)) {
+    return { success: false, message: `Autosave snapshot not found: ${trimmed}` };
+  }
+
+  try {
+    const content = await fs.readFile(snapshotPath, 'utf-8');
+    const parsed = JSON.parse(content) as unknown;
+    const migrated = migrateProjectToV2(parsed);
+
+    if (!validateProject(migrated)) {
+      return {
+        success: false,
+        message: `Autosave snapshot is invalid: ${ajv.errorsText(validateProject.errors)}`,
+      };
+    }
+
+    const project: Project = migrated;
+    const saveResponse = await saveProjectToCurrentRoot(project);
+    if (!saveResponse.success) {
+      return saveResponse;
+    }
+
+    return {
+      success: true,
+      message: `Restored autosave snapshot ${trimmed}`,
+      project,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: `Failed to restore autosave snapshot: ${(error as Error).message}`,
+    };
+  }
+}
+
+async function saveProjectToCurrentRoot(project: Project, reason: SaveProjectReason = 'manual'): Promise<ProjectResponse> {
   if (!currentProjectRoot) {
     return { success: false, message: 'No ProjectRoot set. Create or load a project first.' };
   }
@@ -532,8 +746,17 @@ async function saveProjectToCurrentRoot(project: Project): Promise<ProjectRespon
     return { success: false, message };
   }
 
-  const projectPath = resolveProjectPath(currentProjectRoot, PROJECT_FILE_NAME);
+  const projectRoot = currentProjectRoot;
+  const projectPath = resolveProjectPath(projectRoot, PROJECT_FILE_NAME);
   await fs.writeFile(projectPath, JSON.stringify(project, null, 2), 'utf-8');
+
+  await persistLastProjectRoot(projectRoot);
+  try {
+    await writeProjectAutosaveSnapshot(projectRoot, project, reason);
+  } catch {
+    // Primary project save succeeded; autosave snapshot must not fail the request.
+  }
+
   return { success: true, message: `Saved to ${projectPath}` };
 }
 
@@ -923,6 +1146,44 @@ async function savePreviewSnapshot(request: SavePreviewSnapshotRequest): Promise
   };
 }
 
+async function revealPreviewSnapshot(request: RevealPreviewSnapshotRequest): Promise<RevealPreviewSnapshotResponse> {
+  if (!currentProjectRoot) {
+    return { success: false, message: 'No ProjectRoot set. Create or load a project first.' };
+  }
+
+  const rawPath = request.path?.trim() ?? '';
+  if (!rawPath) {
+    return { success: false, message: 'Snapshot path is required.' };
+  }
+
+  const absoluteSnapshotPath = path.resolve(rawPath);
+  const snapshotsRoot = resolveProjectPath(currentProjectRoot, path.join('exports', 'snapshots'));
+  const relativeToSnapshotsRoot = path.relative(path.resolve(snapshotsRoot), absoluteSnapshotPath);
+  if (relativeToSnapshotsRoot.startsWith('..') || path.isAbsolute(relativeToSnapshotsRoot)) {
+    return { success: false, message: 'Snapshot path is outside the project snapshots folder.' };
+  }
+
+  if (path.extname(absoluteSnapshotPath).toLowerCase() !== '.png') {
+    return { success: false, message: 'Only PNG snapshots can be revealed.' };
+  }
+
+  if (!existsSync(absoluteSnapshotPath)) {
+    return { success: false, message: 'Snapshot file no longer exists on disk.' };
+  }
+
+  const folderPath = path.dirname(absoluteSnapshotPath);
+  const openError = await shell.openPath(folderPath);
+  if (openError) {
+    return { success: false, message: `Snapshot folder could not be opened: ${openError}` };
+  }
+
+  return {
+    success: true,
+    message: 'Snapshot folder opened.',
+    path: absoluteSnapshotPath,
+  };
+}
+
 async function importWorkflowTemplate(workflowId: string): Promise<WorkflowTemplateImportResponse> {
   if (!currentProjectRoot) {
     return { success: false, message: 'No ProjectRoot set. Create or load a project first.' };
@@ -977,6 +1238,95 @@ async function importWorkflowTemplate(workflowId: string): Promise<WorkflowTempl
   }
 }
 
+async function analyzeImageWithOllama(request: AnalyzeImageWithOllamaRequest): Promise<AnalyzeImageWithOllamaResponse> {
+  if (!currentProjectRoot) {
+    return { success: false, message: 'No ProjectRoot set. Create or load a project first.' };
+  }
+
+  const relativeImagePath = (request.relativeImagePath ?? '').trim();
+  if (!relativeImagePath) {
+    return { success: false, message: 'relativeImagePath is required.' };
+  }
+
+  const model = (request.model ?? 'qwen2.5vl:latest').trim() || 'qwen2.5vl:latest';
+  const instruction = (
+    request.prompt
+    ?? 'Analyze this image and produce one concise cinematic generation prompt with style, lighting, framing, and mood.'
+  ).trim();
+  const endpoint = (request.endpoint ?? 'http://127.0.0.1:11434/api/chat').trim() || 'http://127.0.0.1:11434/api/chat';
+
+  try {
+    const absolutePath = resolveProjectPath(currentProjectRoot, relativeImagePath);
+    const fileBuffer = await fs.readFile(absolutePath);
+    const base64Image = fileBuffer.toString('base64');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          stream: false,
+          messages: [
+            {
+              role: 'user',
+              content: instruction,
+              images: [base64Image],
+            },
+          ],
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!response.ok) {
+      const body = await response.text();
+      return {
+        success: false,
+        message: `Ollama request failed (${response.status}): ${body || response.statusText}`,
+      };
+    }
+
+    const json = await response.json() as unknown;
+    const content = isRecord(json)
+      ? (
+        isRecord(json.message) && typeof json.message.content === 'string'
+          ? json.message.content
+          : typeof json.response === 'string'
+            ? json.response
+            : ''
+      )
+      : '';
+
+    const promptText = content.trim();
+    if (!promptText) {
+      return {
+        success: false,
+        message: 'Ollama returned no prompt content.',
+        model,
+      };
+    }
+
+    return {
+      success: true,
+      message: 'Image analyzed with Ollama.',
+      promptText,
+      model,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: `Ollama analyze failed: ${(error as Error).message}`,
+      model,
+    };
+  }
+}
+
 function emitComfyRunEvent(event: Omit<ComfyRunEvent, 'occurredAt'>): void {
   const payload: ComfyRunEvent = {
     ...event,
@@ -1007,6 +1357,66 @@ async function readCurrentProjectFromDisk(): Promise<Project> {
   }
 
   return migrated;
+}
+
+async function loadProjectFromPath(
+  projectPath: string,
+  successMessagePrefix: string,
+): Promise<ProjectResponse> {
+  if (path.basename(projectPath) !== PROJECT_FILE_NAME) {
+    return { success: false, message: 'Please select project.json.' };
+  }
+
+  try {
+    const content = await fs.readFile(projectPath, 'utf-8');
+    const parsed = JSON.parse(content) as unknown;
+    const migrated = migrateProjectToV2(parsed);
+
+    if (!validateProject(migrated)) {
+      return {
+        success: false,
+        message: `Loaded file is invalid: ${ajv.errorsText(validateProject.errors)}`,
+      };
+    }
+
+    const project: Project = migrated;
+    const projectRoot = path.dirname(projectPath);
+    currentProjectRoot = projectRoot;
+    await ensureProjectStructure(projectRoot);
+    await persistLastProjectRoot(projectRoot);
+
+    return {
+      success: true,
+      message: `${successMessagePrefix} ${projectPath}`,
+      project,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: `Failed to load project: ${(error as Error).message}`,
+    };
+  }
+}
+
+async function restoreLastSessionProject(): Promise<ProjectResponse> {
+  const session = await readSessionState();
+  const projectRoot = session.lastProjectRoot?.trim() ?? '';
+  if (!projectRoot) {
+    return {
+      success: false,
+      message: 'No previous session found.',
+    };
+  }
+
+  const projectPath = resolveProjectPath(projectRoot, PROJECT_FILE_NAME);
+  if (!existsSync(projectPath)) {
+    return {
+      success: false,
+      message: `Last session project not found: ${projectPath}`,
+    };
+  }
+
+  return loadProjectFromPath(projectPath, 'Restored last session from');
 }
 
 function toJsonValue(value: unknown): JsonValue {
@@ -1145,6 +1555,7 @@ registerIpc({
     await fs.writeFile(projectPath, JSON.stringify(project, null, 2), 'utf-8');
 
     currentProjectRoot = projectRoot;
+    await persistLastProjectRoot(projectRoot);
 
     return {
       success: true,
@@ -1152,8 +1563,8 @@ registerIpc({
       project,
     };
   },
-  saveProject: async (project: Project): Promise<ProjectResponse> => {
-    return saveProjectToCurrentRoot(project);
+  saveProject: async (project: Project, reason?: SaveProjectReason): Promise<ProjectResponse> => {
+    return saveProjectToCurrentRoot(project, reason ?? 'manual');
   },
   loadProject: async (): Promise<ProjectResponse> => {
     const result = await dialog.showOpenDialog({
@@ -1167,31 +1578,16 @@ registerIpc({
     }
 
     const projectPath = result.filePaths[0];
-    if (path.basename(projectPath) !== PROJECT_FILE_NAME) {
-      return { success: false, message: 'Please select project.json.' };
-    }
-
-    const content = await fs.readFile(projectPath, 'utf-8');
-    const parsed = JSON.parse(content) as unknown;
-    const migrated = migrateProjectToV2(parsed);
-
-    if (!validateProject(migrated)) {
-      return {
-        success: false,
-        message: `Loaded file is invalid: ${ajv.errorsText(validateProject.errors)}`,
-      };
-    }
-
-    const project: Project = migrated;
-
-    currentProjectRoot = path.dirname(projectPath);
-    await ensureProjectStructure(currentProjectRoot);
-
-    return {
-      success: true,
-      message: `Loaded from ${projectPath}`,
-      project,
-    };
+    return loadProjectFromPath(projectPath, 'Loaded from');
+  },
+  restoreLastSession: async (): Promise<ProjectResponse> => {
+    return restoreLastSessionProject();
+  },
+  listProjectAutosaves: async (): Promise<ProjectAutosaveListResponse> => {
+    return listProjectAutosaves();
+  },
+  restoreProjectAutosave: async (fileName: string): Promise<ProjectResponse> => {
+    return restoreProjectAutosave(fileName);
   },
   getProjectRoot: (): string | null => {
     return currentProjectRoot;
@@ -1228,6 +1624,9 @@ registerIpc({
   },
   savePreviewSnapshot: async (request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> => {
     return savePreviewSnapshot(request);
+  },
+  revealPreviewSnapshot: async (request: RevealPreviewSnapshotRequest): Promise<RevealPreviewSnapshotResponse> => {
+    return revealPreviewSnapshot(request);
   },
   createComfyGalleryFolder: async (request: CreateComfyGalleryFolderRequest): Promise<CreateComfyGalleryFolderResponse> => {
     return createComfyGalleryFolder(request);
@@ -1274,6 +1673,9 @@ registerIpc({
       relativeAudioPath,
       bins,
     });
+  },
+  analyzeImageWithOllama: async (request: AnalyzeImageWithOllamaRequest): Promise<AnalyzeImageWithOllamaResponse> => {
+    return analyzeImageWithOllama(request);
   },
 });
 

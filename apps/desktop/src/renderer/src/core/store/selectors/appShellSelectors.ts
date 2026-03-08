@@ -19,5 +19,8 @@ export const selectAppShellStoreState = (state: StudioState) => ({
   checkFfmpegHealth: state.checkFfmpegHealth,
   newProject: state.newProject,
   loadProject: state.loadProject,
+  restoreLastSession: state.restoreLastSession,
+  listProjectAutosaves: state.listProjectAutosaves,
+  restoreProjectAutosave: state.restoreProjectAutosave,
   saveProject: state.saveProject,
 });

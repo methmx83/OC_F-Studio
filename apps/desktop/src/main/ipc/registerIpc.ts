@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@ai-filmstudio/shared';
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
-import type { ComfyGalleryListRequest, ComfyGalleryListResponse, CreateComfyGalleryFolderRequest, CreateComfyGalleryFolderResponse, ProjectResponse, SavePreviewSnapshotRequest, SavePreviewSnapshotResponse, WorkflowPresetsResponse, WorkflowPresetsSaveRequest, WorkflowTemplateImportResponse } from '@shared/ipc/project';
+import type { AnalyzeImageWithOllamaRequest, AnalyzeImageWithOllamaResponse, ComfyGalleryListRequest, ComfyGalleryListResponse, CreateComfyGalleryFolderRequest, CreateComfyGalleryFolderResponse, ProjectAutosaveListResponse, ProjectResponse, RevealPreviewSnapshotRequest, RevealPreviewSnapshotResponse, SaveProjectReason, SavePreviewSnapshotRequest, SavePreviewSnapshotResponse, WorkflowPresetsResponse, WorkflowPresetsSaveRequest, WorkflowTemplateImportResponse } from '@shared/ipc/project';
 import type { Project } from '@shared/types';
 import type {
   CancelComfyRunRequest,
@@ -19,8 +19,11 @@ import type { WorkflowCatalogResponse } from '@shared/workflows';
 
 export interface RegisterIpcHandlers {
   newProject: () => Promise<ProjectResponse>;
-  saveProject: (project: Project) => Promise<ProjectResponse>;
+  saveProject: (project: Project, reason?: SaveProjectReason) => Promise<ProjectResponse>;
   loadProject: () => Promise<ProjectResponse>;
+  restoreLastSession: () => Promise<ProjectResponse>;
+  listProjectAutosaves: () => Promise<ProjectAutosaveListResponse>;
+  restoreProjectAutosave: (fileName: string) => Promise<ProjectResponse>;
   getProjectRoot: () => string | null;
   listWorkflowCatalog: () => Promise<WorkflowCatalogResponse>;
   getComfyHealth: (request?: ComfyHealthRequest) => Promise<ComfyHealthResponse>;
@@ -33,6 +36,7 @@ export interface RegisterIpcHandlers {
   importComfyOutput: (outputPath: string) => Promise<AssetImportResponse>;
   listComfyGallery: (request?: ComfyGalleryListRequest) => Promise<ComfyGalleryListResponse>;
   savePreviewSnapshot: (request: SavePreviewSnapshotRequest) => Promise<SavePreviewSnapshotResponse>;
+  revealPreviewSnapshot: (request: RevealPreviewSnapshotRequest) => Promise<RevealPreviewSnapshotResponse>;
   createComfyGalleryFolder: (request: CreateComfyGalleryFolderRequest) => Promise<CreateComfyGalleryFolderResponse>;
   importWorkflowTemplate: (workflowId: string) => Promise<WorkflowTemplateImportResponse>;
   getWorkflowPresets: () => Promise<WorkflowPresetsResponse>;
@@ -43,6 +47,7 @@ export interface RegisterIpcHandlers {
   getFfmpegHealth: () => Promise<FfmpegHealthResponse>;
   ensureVideoProxy: (relativeVideoPath: string) => Promise<ProxyResponse>;
   getAudioWaveformPeaks: (relativeAudioPath: string, bins: number) => Promise<AudioWaveformResponse>;
+  analyzeImageWithOllama: (request: AnalyzeImageWithOllamaRequest) => Promise<AnalyzeImageWithOllamaResponse>;
 }
 
 export function registerIpc(handlers: RegisterIpcHandlers): void {
@@ -50,12 +55,24 @@ export function registerIpc(handlers: RegisterIpcHandlers): void {
     return handlers.newProject();
   });
 
-  ipcMain.handle(IPC_CHANNELS.project.save, async (_event, project: Project): Promise<ProjectResponse> => {
-    return handlers.saveProject(project);
+  ipcMain.handle(IPC_CHANNELS.project.save, async (_event, project: Project, reason?: SaveProjectReason): Promise<ProjectResponse> => {
+    return handlers.saveProject(project, reason);
   });
 
   ipcMain.handle(IPC_CHANNELS.project.load, async (): Promise<ProjectResponse> => {
     return handlers.loadProject();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.project.restoreLastSession, async (): Promise<ProjectResponse> => {
+    return handlers.restoreLastSession();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.project.listAutosaves, async (): Promise<ProjectAutosaveListResponse> => {
+    return handlers.listProjectAutosaves();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.project.restoreAutosave, async (_event, fileName: string): Promise<ProjectResponse> => {
+    return handlers.restoreProjectAutosave(fileName);
   });
 
   ipcMain.handle(IPC_CHANNELS.project.getRoot, (): string | null => {
@@ -125,6 +142,13 @@ export function registerIpc(handlers: RegisterIpcHandlers): void {
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.project.revealPreviewSnapshot,
+    async (_event, request: RevealPreviewSnapshotRequest): Promise<RevealPreviewSnapshotResponse> => {
+      return handlers.revealPreviewSnapshot(request);
+    },
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.project.createComfyGalleryFolder,
     async (_event, request: CreateComfyGalleryFolderRequest): Promise<CreateComfyGalleryFolderResponse> => {
       return handlers.createComfyGalleryFolder(request);
@@ -182,6 +206,13 @@ export function registerIpc(handlers: RegisterIpcHandlers): void {
     IPC_CHANNELS.project.audioWaveformPeaks,
     async (_event, relativeAudioPath: string, bins: number): Promise<AudioWaveformResponse> => {
       return handlers.getAudioWaveformPeaks(relativeAudioPath, bins);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.project.analyzeImageWithOllama,
+    async (_event, request: AnalyzeImageWithOllamaRequest): Promise<AnalyzeImageWithOllamaResponse> => {
+      return handlers.analyzeImageWithOllama(request);
     },
   );
 }

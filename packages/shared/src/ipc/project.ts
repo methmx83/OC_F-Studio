@@ -1,9 +1,25 @@
 import type { Project } from '../types.js';
 
+export type SaveProjectReason = 'manual' | 'autosave';
+export type ProjectSnapshotReason = SaveProjectReason | 'unknown';
+
 export interface ProjectResponse {
   success: boolean;
   message: string;
   project?: Project;
+}
+
+export interface ProjectAutosaveSnapshot {
+  fileName: string;
+  createdAt: string;
+  sizeBytes: number;
+  reason: ProjectSnapshotReason;
+}
+
+export interface ProjectAutosaveListResponse {
+  success: boolean;
+  message: string;
+  snapshots: ProjectAutosaveSnapshot[];
 }
 
 export interface WorkflowTemplateImportResponse {
@@ -74,6 +90,16 @@ export interface SavePreviewSnapshotResponse {
   path?: string;
 }
 
+export interface RevealPreviewSnapshotRequest {
+  path: string;
+}
+
+export interface RevealPreviewSnapshotResponse {
+  success: boolean;
+  message: string;
+  path?: string;
+}
+
 export interface CreateComfyGalleryFolderRequest {
   outputDir?: string;
   folderName: string;
@@ -85,3 +111,16 @@ export interface CreateComfyGalleryFolderResponse {
   path?: string;
 }
 
+export interface AnalyzeImageWithOllamaRequest {
+  relativeImagePath: string;
+  model?: string;
+  prompt?: string;
+  endpoint?: string;
+}
+
+export interface AnalyzeImageWithOllamaResponse {
+  success: boolean;
+  message: string;
+  promptText?: string;
+  model?: string;
+}

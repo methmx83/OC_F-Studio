@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 import type { CancelComfyRunRequest, CancelComfyRunResponse, ComfyHealthRequest, ComfyHealthResponse, ComfyRunEvent, PreviewComfyRunPayloadRequest, PreviewComfyRunPayloadResponse, QueueComfyRunRequest, QueueComfyRunResponse } from '@shared/comfy';
-import type { ComfyGalleryListRequest, ComfyGalleryListResponse, CreateComfyGalleryFolderRequest, CreateComfyGalleryFolderResponse, SavePreviewSnapshotRequest, SavePreviewSnapshotResponse, WorkflowTemplateImportResponse } from '@shared/ipc/project';
+import type { AnalyzeImageWithOllamaRequest, AnalyzeImageWithOllamaResponse, ComfyGalleryListRequest, ComfyGalleryListResponse, CreateComfyGalleryFolderRequest, CreateComfyGalleryFolderResponse, ProjectAutosaveListResponse, RevealPreviewSnapshotRequest, RevealPreviewSnapshotResponse, SaveProjectReason, SavePreviewSnapshotRequest, SavePreviewSnapshotResponse, WorkflowTemplateImportResponse } from '@shared/ipc/project';
 import {
   getProjectApi,
   type ProjectApiPort,
@@ -69,7 +69,13 @@ export function getIpcClient(): IpcClient {
   return {
     newProject: () => requireMethod(api, 'newProject', PROJECT_API_UNAVAILABLE_MESSAGE)(),
     loadProject: () => requireMethod(api, 'loadProject', PROJECT_API_UNAVAILABLE_MESSAGE)(),
-    saveProject: (project) => requireMethod(api, 'saveProject', PROJECT_API_UNAVAILABLE_MESSAGE)(project),
+    restoreLastSession: () => requireMethod(api, 'restoreLastSession', PROJECT_API_UNAVAILABLE_MESSAGE)(),
+    listProjectAutosaves: async (): Promise<ProjectAutosaveListResponse> => {
+      const method = requireMethod(api, 'listProjectAutosaves', PROJECT_API_UNAVAILABLE_MESSAGE);
+      return method();
+    },
+    restoreProjectAutosave: (fileName) => requireMethod(api, 'restoreProjectAutosave', PROJECT_API_UNAVAILABLE_MESSAGE)(fileName),
+    saveProject: (project, reason?: SaveProjectReason) => requireMethod(api, 'saveProject', PROJECT_API_UNAVAILABLE_MESSAGE)(project, reason),
     importVideo: () => requireMethod(api, 'importVideo', PROJECT_API_UNAVAILABLE_MESSAGE)(),
     importImage: () => requireMethod(api, 'importImage', PROJECT_API_UNAVAILABLE_MESSAGE)(),
     importAudio: () => requireMethod(api, 'importAudio', PROJECT_API_UNAVAILABLE_MESSAGE)(),
@@ -80,6 +86,10 @@ export function getIpcClient(): IpcClient {
     },
     savePreviewSnapshot: async (request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> => {
       const method = requireMethod(api, 'savePreviewSnapshot', PROJECT_API_UNAVAILABLE_MESSAGE);
+      return method(request);
+    },
+    revealPreviewSnapshot: async (request: RevealPreviewSnapshotRequest): Promise<RevealPreviewSnapshotResponse> => {
+      const method = requireMethod(api, 'revealPreviewSnapshot', PROJECT_API_UNAVAILABLE_MESSAGE);
       return method(request);
     },
     createComfyGalleryFolder: async (request: CreateComfyGalleryFolderRequest): Promise<CreateComfyGalleryFolderResponse> => {
@@ -100,6 +110,10 @@ export function getIpcClient(): IpcClient {
     getFfmpegHealth: () => requireMethod(api, 'getFfmpegHealth', PROJECT_API_UNAVAILABLE_MESSAGE)(),
     ensureVideoProxy: (relativeVideoPath) => requireMethod(api, 'ensureVideoProxy', PROJECT_API_UNAVAILABLE_MESSAGE)(relativeVideoPath),
     getAudioWaveformPeaks: (relativeAudioPath, bins) => requireMethod(api, 'getAudioWaveformPeaks', PROJECT_API_UNAVAILABLE_MESSAGE)(relativeAudioPath, bins),
+    analyzeImageWithOllama: async (request: AnalyzeImageWithOllamaRequest): Promise<AnalyzeImageWithOllamaResponse> => {
+      const method = requireMethod(api, 'analyzeImageWithOllama', PROJECT_API_UNAVAILABLE_MESSAGE);
+      return method(request);
+    },
     getComfyHealth: async (request?: ComfyHealthRequest): Promise<ComfyHealthResponse> => {
       const method = requireMethod(api, 'getComfyHealth', COMFY_BRIDGE_UNAVAILABLE_MESSAGE);
       return method(request);

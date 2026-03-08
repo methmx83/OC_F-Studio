@@ -1,4 +1,5 @@
 /* eslint-disable no-unused-vars */
+import type { SaveProjectReason } from '@shared/ipc/project';
 import { getIpcClient } from '../../adapters/ipcClient';
 import type { StudioState } from '../studioStore';
 
@@ -36,6 +37,9 @@ type ProjectSliceKeys =
   | 'clearLastError'
   | 'newProject'
   | 'loadProject'
+  | 'restoreLastSession'
+  | 'listProjectAutosaves'
+  | 'restoreProjectAutosave'
   | 'saveProject';
 
 export function createProjectSlice(
@@ -95,7 +99,64 @@ export function createProjectSlice(
       }
     },
 
-    saveProject: async () => {
+    restoreLastSession: async () => {
+      set({ isProjectBusy: true, lastError: null });
+
+      try {
+        const ipc = getIpcClient();
+        const response = await ipc.restoreLastSession();
+        if (!response.success || !response.project) {
+          set({ isProjectBusy: false, projectMessage: response.message });
+          return;
+        }
+
+        const projectRoot = await ipc.getProjectRoot();
+        const nextState = deps.toProjectState(response.project, projectRoot, response.message);
+        set({ ...nextState, isProjectBusy: false, lastError: null });
+        await deps.hydrateAssetThumbnails(response.project.assets, set, get);
+        void deps.hydrateKnownVideoProxies(response.project.assets, set, get);
+      } catch (error) {
+        set({ isProjectBusy: false, lastError: deps.toErrorMessage(error), projectMessage: 'Session restore failed' });
+      }
+    },
+
+    listProjectAutosaves: async () => {
+      try {
+        const ipc = getIpcClient();
+        return await ipc.listProjectAutosaves();
+      } catch (error) {
+        return {
+          success: false,
+          message: deps.toErrorMessage(error),
+          snapshots: [],
+        };
+      }
+    },
+
+    restoreProjectAutosave: async (fileName) => {
+      set({ isProjectBusy: true, lastError: null });
+
+      try {
+        const ipc = getIpcClient();
+        const response = await ipc.restoreProjectAutosave(fileName);
+        if (!response.success || !response.project) {
+          set({ isProjectBusy: false, lastError: response.message, projectMessage: response.message });
+          return false;
+        }
+
+        const projectRoot = await ipc.getProjectRoot();
+        const nextState = deps.toProjectState(response.project, projectRoot, response.message);
+        set({ ...nextState, isProjectBusy: false, lastError: null });
+        await deps.hydrateAssetThumbnails(response.project.assets, set, get);
+        void deps.hydrateKnownVideoProxies(response.project.assets, set, get);
+        return true;
+      } catch (error) {
+        set({ isProjectBusy: false, lastError: deps.toErrorMessage(error), projectMessage: 'Autosave restore failed' });
+        return false;
+      }
+    },
+
+    saveProject: async (reason: SaveProjectReason = 'manual') => {
       const state = get();
       if (!state.project) {
         set({ lastError: 'No project loaded. Nothing to save.' });
@@ -106,7 +167,7 @@ export function createProjectSlice(
 
       try {
         const ipc = getIpcClient();
-        const response = await ipc.saveProject(state.project);
+        const response = await ipc.saveProject(state.project, reason);
         if (!response.success) {
           set({ isProjectBusy: false, lastError: response.message, projectMessage: response.message });
           return;

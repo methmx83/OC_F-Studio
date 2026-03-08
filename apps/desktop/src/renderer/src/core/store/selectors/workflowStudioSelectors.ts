@@ -7,6 +7,7 @@ export const selectWorkflowStudioStoreState = (state: StudioState) => ({
   comfyBaseUrl: state.comfyBaseUrl,
   isProjectBusy: state.isProjectBusy,
   queuedWorkflowRuns: state.queuedWorkflowRuns,
+  autoImportedOutputPathsByRunId: state.autoImportedOutputPathsByRunId,
   importComfyOutputAsset: state.importComfyOutputAsset,
   dropAssetToTimeline: state.dropAssetToTimeline,
   setComfyBaseUrl: state.setComfyBaseUrl,

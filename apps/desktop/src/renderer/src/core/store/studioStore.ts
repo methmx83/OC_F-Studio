@@ -1,6 +1,7 @@
 ﻿/* eslint-disable no-unused-vars */
 import type { Asset, Clip, Project, Timeline, Track } from '@shared/types';
 import type { ComfyWorkflowRunRequest } from '@shared/comfy';
+import type { ProjectAutosaveListResponse, SaveProjectReason } from '@shared/ipc/project';
 import { create } from 'zustand';
 
 import {
@@ -86,6 +87,7 @@ export interface StudioState {
   isDirty: boolean;
   comfyOnline: boolean;
   comfyBaseUrl: string;
+  autoImportedOutputPathsByRunId: Record<string, string[]>;
   lastError: string | null;
   pastCount: number;
   futureCount: number;
@@ -120,7 +122,10 @@ export interface StudioState {
   ensureVideoProxy: (assetId: string) => Promise<void>;
   newProject: () => Promise<void>;
   loadProject: () => Promise<void>;
-  saveProject: () => Promise<void>;
+  restoreLastSession: () => Promise<void>;
+  listProjectAutosaves: () => Promise<ProjectAutosaveListResponse>;
+  restoreProjectAutosave: (fileName: string) => Promise<boolean>;
+  saveProject: (reason?: SaveProjectReason) => Promise<void>;
   importVideoAsset: () => Promise<void>;
   importImageAsset: () => Promise<void>;
   importAudioAsset: () => Promise<void>;
@@ -215,4 +220,3 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   }),
 
 }));
-

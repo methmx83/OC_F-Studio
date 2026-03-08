@@ -3,6 +3,9 @@ export const IPC_CHANNELS = {
     new: 'project:new',
     save: 'project:save',
     load: 'project:load',
+    restoreLastSession: 'project:restore-last-session',
+    listAutosaves: 'project:list-autosaves',
+    restoreAutosave: 'project:restore-autosave',
     getRoot: 'project:get-root',
     listWorkflowCatalog: 'project:list-workflow-catalog',
     importVideo: 'project:import-video',
@@ -11,6 +14,7 @@ export const IPC_CHANNELS = {
     importComfyOutput: 'project:import-comfy-output',
     listComfyGallery: 'project:list-comfy-gallery',
     savePreviewSnapshot: 'project:save-preview-snapshot',
+    revealPreviewSnapshot: 'project:reveal-preview-snapshot',
     createComfyGalleryFolder: 'project:create-comfy-gallery-folder',
     importWorkflowTemplate: 'project:import-workflow-template',
     getWorkflowPresets: 'project:get-workflow-presets',
@@ -21,6 +25,7 @@ export const IPC_CHANNELS = {
     ffmpegHealth: 'project:ffmpeg-health',
     ensureVideoProxy: 'project:ensure-video-proxy',
     audioWaveformPeaks: 'project:audio-waveform-peaks',
+    analyzeImageWithOllama: 'project:analyze-image-with-ollama',
   },
   comfy: {
     health: 'comfy:health',
@@ -30,4 +35,3 @@ export const IPC_CHANNELS = {
     runEvent: 'comfy:run-event',
   },
 } as const;
-

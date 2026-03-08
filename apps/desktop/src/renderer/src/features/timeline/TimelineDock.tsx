@@ -288,7 +288,6 @@ export default function TimelineDock() {
     }
     return selectedTimelineClip.gain ?? 1;
   }, [assets, selectedTimelineClip]);
-
   const handleAssetDrop = (event: React.DragEvent<HTMLDivElement>, targetTrackId?: string) => {
     event.preventDefault();
     event.stopPropagation();
@@ -605,7 +604,13 @@ export default function TimelineDock() {
               </>
             )}
             <button
-              onClick={() => window.dispatchEvent(new CustomEvent("afs:timeline-snapshot"))}
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent("afs:timeline-snapshot", {
+                    detail: { source: "timeline", copyPathToClipboard: false },
+                  }),
+                )
+              }
               className="p-1.5 rounded-lg bg-zinc-900/40 border border-white/5 text-zinc-400 hover:text-emerald-300 transition-all"
               title="Snapshot am Playhead speichern"
             >

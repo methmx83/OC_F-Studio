@@ -36,6 +36,7 @@ export function toProjectState(
     workflows,
     selectedWorkflowId: workflows[0]?.id ?? '',
     queuedWorkflowRuns: [],
+    autoImportedOutputPathsByRunId: {},
     isDirty: false,
   };
 }

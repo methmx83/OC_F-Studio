@@ -27,12 +27,14 @@ import type {
 import { getIpcClient } from "../../core/adapters/ipcClient";
 import { selectWorkflowStudioStoreState } from "../../core/store/selectors";
 import { useStudioStore } from "../../core/store/studioStore";
+import NodeWorkflowEditor from "./NodeWorkflowEditor";
 
 type LoadState = "idle" | "loading" | "loaded" | "error";
 type NumKey = "width" | "height" | "fps" | "frames" | "steps";
 type SendStatus = "idle" | "sending" | "success" | "error";
 type RunFilter = "all" | "queued" | "failed" | "success";
 type RunSort = "newest" | "oldest";
+type EditorMode = "form" | "graph";
 
 type Draft = {
   settings: Record<NumKey, string>;
@@ -77,6 +79,7 @@ export default function WorkflowStudioView() {
     comfyBaseUrl,
     isProjectBusy,
     queuedWorkflowRuns,
+    autoImportedOutputPathsByRunId,
     importComfyOutputAsset,
     dropAssetToTimeline,
     setComfyBaseUrl,
@@ -88,6 +91,7 @@ export default function WorkflowStudioView() {
   const [cat, setCat] = useState<WorkflowCatalogCategory>("videos");
   const [wfId, setWfId] = useState("");
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [inputConnectionsByWorkflow, setInputConnectionsByWorkflow] = useState<Record<string, Record<string, boolean>>>({});
   const [sendState, setSendState] = useState<{ status: SendStatus; message: string; runId?: string; promptId?: string; hint?: string }>({
     status: "idle",
     message: "",
@@ -110,6 +114,7 @@ export default function WorkflowStudioView() {
       return "newest";
     }
   });
+  const [editorMode, setEditorMode] = useState<EditorMode>("form");
   const [presetsByWorkflow, setPresetsByWorkflow] = useState<Record<string, WorkflowPreset[]>>({});
   const [presetUpdatedAtByWorkflow, setPresetUpdatedAtByWorkflow] = useState<Record<string, string>>({});
   const [presetLoadWarning, setPresetLoadWarning] = useState<string | null>(null);
@@ -151,6 +156,13 @@ export default function WorkflowStudioView() {
       const next = { ...prev };
       catalog.workflows.forEach((w) => {
         next[w.id] = mergeDraft(w, prev[w.id]);
+      });
+      return next;
+    });
+    setInputConnectionsByWorkflow((prev) => {
+      const next = { ...prev };
+      catalog.workflows.forEach((w) => {
+        next[w.id] = mergeInputConnections(w, prev[w.id]);
       });
       return next;
     });
@@ -284,7 +296,14 @@ export default function WorkflowStudioView() {
   }, []);
 
   const draft = useMemo(() => (selected ? mergeDraft(selected, drafts[selected.id]) : null), [selected, drafts]);
-  const validation = useMemo(() => (selected && draft ? validate(selected, draft, assets) : null), [selected, draft, assets]);
+  const inputConnections = useMemo(
+    () => (selected ? mergeInputConnections(selected, inputConnectionsByWorkflow[selected.id]) : null),
+    [selected, inputConnectionsByWorkflow],
+  );
+  const validation = useMemo(
+    () => (selected && draft ? validate(selected, draft, assets, inputConnections ?? undefined) : null),
+    [selected, draft, assets, inputConnections],
+  );
   const selectedWorkflowRuns = useMemo(
     () => (selected ? queuedWorkflowRuns.filter((run) => run.workflowId === selected.id).slice(0, 24) : []),
     [queuedWorkflowRuns, selected],
@@ -321,8 +340,29 @@ export default function WorkflowStudioView() {
     patchDraft((d) => ({ ...d, settings: { ...d.settings, [key]: value } }));
   };
   const onInput = (key: string, value: string) => {
+    if (!selected) return;
     setPresetConflictMessage(null);
     patchDraft((d) => ({ ...d, inputs: { ...d.inputs, [key]: value } }));
+    if (value.trim()) {
+      setInputConnectionsByWorkflow((prev) => ({
+        ...prev,
+        [selected.id]: {
+          ...mergeInputConnections(selected, prev[selected.id]),
+          [key]: true,
+        },
+      }));
+    }
+  };
+  const onInputConnectionChange = (key: string, connected: boolean) => {
+    if (!selected) return;
+    setPresetConflictMessage(null);
+    setInputConnectionsByWorkflow((prev) => ({
+      ...prev,
+      [selected.id]: {
+        ...mergeInputConnections(selected, prev[selected.id]),
+        [key]: connected,
+      },
+    }));
   };
 
   function onSavePreset(): void {
@@ -801,83 +841,121 @@ export default function WorkflowStudioView() {
                 </div>
 
                 <div className="rounded-2xl border border-white/5 bg-zinc-950/40 p-4">
-                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Settings</div>
-
-                  <div className="mt-3 rounded-xl border border-white/5 bg-zinc-900/40 p-3 space-y-2">
-                    <div className="text-[9px] uppercase tracking-wider text-zinc-500">Parameter Presets (MVP)</div>
-                    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_180px_auto_auto_auto] gap-2 items-center">
-                      <input
-                        type="text"
-                        value={presetName}
-                        onChange={(e) => setPresetName(e.target.value)}
-                        placeholder="Preset-Name (z. B. Fast Preview)"
-                        className="w-full rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-[11px] text-zinc-100 outline-none focus:border-blue-500/50"
-                      />
-                      <select
-                        value={selectedPresetId}
-                        onChange={(e) => {
-                          const id = e.target.value;
-                          setSelectedPresetId(id);
-                          const preset = workflowPresets.find((p) => p.id === id);
-                          setPresetName(preset?.name ?? "");
-                        }}
-                        className="w-full rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-[11px] text-zinc-100 outline-none focus:border-blue-500/50"
-                      >
-                        <option value="">Preset waehlen...</option>
-                        {workflowPresets.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
-                      <button onClick={onApplyPreset} disabled={!selectedPresetId || isSavingPresets} className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-950/60 text-[9px] font-black uppercase tracking-wider text-zinc-300 disabled:opacity-40">
-                        Apply
-                      </button>
-                      <button onClick={onSavePreset} disabled={isSavingPresets} className="px-3 py-2 rounded-lg border border-emerald-400/20 bg-emerald-400/10 text-[9px] font-black uppercase tracking-wider text-emerald-200 disabled:opacity-40">
-                        {isSavingPresets ? "Saving..." : "Save"}
-                      </button>
-                      <button onClick={onDeletePreset} disabled={!selectedPresetId || isSavingPresets} className="px-3 py-2 rounded-lg border border-red-400/20 bg-red-400/10 text-[9px] font-black uppercase tracking-wider text-red-200 disabled:opacity-40">
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-2 xl:grid-cols-5 gap-3">
-                    {NUM_FIELDS.map((f) => (
-                      <label key={f.key} className="block">
-                        <div className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">{f.label}</div>
-                        <input type="number" min={1} step={1} value={draft.settings[f.key]} onChange={(e) => onNum(f.key, e.target.value)} className="w-full rounded-lg border border-white/10 bg-zinc-900/70 px-3 py-2 text-[11px] text-zinc-100 outline-none focus:border-blue-500/50" />
-                      </label>
-                    ))}
+                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Parameter Presets (MVP)</div>
+                  <div className="mt-3 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_180px_auto_auto_auto] gap-2 items-center">
+                    <input
+                      type="text"
+                      value={presetName}
+                      onChange={(e) => setPresetName(e.target.value)}
+                      placeholder="Preset-Name (z. B. Fast Preview)"
+                      className="w-full rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-[11px] text-zinc-100 outline-none focus:border-blue-500/50"
+                    />
+                    <select
+                      value={selectedPresetId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setSelectedPresetId(id);
+                        const preset = workflowPresets.find((p) => p.id === id);
+                        setPresetName(preset?.name ?? "");
+                      }}
+                      className="w-full rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-[11px] text-zinc-100 outline-none focus:border-blue-500/50"
+                    >
+                      <option value="">Preset waehlen...</option>
+                      {workflowPresets.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    <button onClick={onApplyPreset} disabled={!selectedPresetId || isSavingPresets} className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-950/60 text-[9px] font-black uppercase tracking-wider text-zinc-300 disabled:opacity-40">
+                      Apply
+                    </button>
+                    <button onClick={onSavePreset} disabled={isSavingPresets} className="px-3 py-2 rounded-lg border border-emerald-400/20 bg-emerald-400/10 text-[9px] font-black uppercase tracking-wider text-emerald-200 disabled:opacity-40">
+                      {isSavingPresets ? "Saving..." : "Save"}
+                    </button>
+                    <button onClick={onDeletePreset} disabled={!selectedPresetId || isSavingPresets} className="px-3 py-2 rounded-lg border border-red-400/20 bg-red-400/10 text-[9px] font-black uppercase tracking-wider text-red-200 disabled:opacity-40">
+                      Delete
+                    </button>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-white/5 bg-zinc-950/40 p-4">
-                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Inputs</div>
-                  {selected.inputs.length === 0 ? (
-                    <div className="mt-3 text-[10px] text-zinc-500">No inputs defined yet in <span className="font-mono">{selected.metaRelativePath}</span>.</div>
-                  ) : (
-                    <div className="mt-3 space-y-3">
-                      {selected.inputs.map((i) => {
-                        const options = assetsForInput(assets, i);
-                        return (
-                          <div key={i.key} className="rounded-xl border border-white/5 bg-zinc-900/40 p-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="text-[11px] font-bold text-zinc-100 truncate">{i.label}</div>
-                                <div className="mt-1 text-[9px] text-zinc-500 font-mono truncate">{i.key} {i.required ? "(required)" : "(optional)"}</div>
-                              </div>
-                              <span className="text-[8px] px-2 py-1 rounded-md border border-white/10 bg-zinc-950/60 text-zinc-400 uppercase tracking-wider">{i.type}</span>
-                            </div>
-                            <select value={draft.inputs[i.key] ?? ""} onChange={(e) => onInput(i.key, e.target.value)} className="mt-3 w-full rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-[11px] text-zinc-100 outline-none focus:border-blue-500/50">
-                              <option value="">{`Select ${i.type} asset${i.required ? "" : " (optional)"}`}</option>
-                              {options.map((a) => <option key={a.id} value={a.id}>{a.originalName}</option>)}
-                            </select>
-                            {options.length === 0 && <div className="mt-2 text-[10px] text-zinc-500">No compatible {i.type} assets in this project yet.</div>}
-                          </div>
-                        );
-                      })}
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Editor Mode</div>
+                      <div className="mt-1 text-[10px] text-zinc-600">Switch between form fields and the visual node graph.</div>
                     </div>
-                  )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setEditorMode("form")}
+                        className={`px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider ${editorMode === "form" ? "border-blue-500/40 bg-blue-500/15 text-blue-200" : "border-white/10 bg-zinc-950/60 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"}`}
+                      >
+                        Form
+                      </button>
+                      <button
+                        onClick={() => setEditorMode("graph")}
+                        className={`px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider ${editorMode === "graph" ? "border-blue-500/40 bg-blue-500/15 text-blue-200" : "border-white/10 bg-zinc-950/60 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"}`}
+                      >
+                        Graph
+                      </button>
+                    </div>
+                  </div>
                 </div>
+
+                {editorMode === "graph" ? (
+                  <NodeWorkflowEditor
+                    workflow={selected}
+                    draft={draft}
+                    assets={assets}
+                    connections={inputConnections ?? {}}
+                    validationIssues={validation.issues}
+                    canSend={validation.canSend}
+                    onNumChange={onNum}
+                    onInputChange={onInput}
+                    onConnectionChange={onInputConnectionChange}
+                  />
+                ) : (
+                  <>
+                    <div className="rounded-2xl border border-white/5 bg-zinc-950/40 p-4">
+                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Settings</div>
+                      <div className="mt-3 grid grid-cols-2 xl:grid-cols-5 gap-3">
+                        {NUM_FIELDS.map((f) => (
+                          <label key={f.key} className="block">
+                            <div className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">{f.label}</div>
+                            <input type="number" min={1} step={1} value={draft.settings[f.key]} onChange={(e) => onNum(f.key, e.target.value)} className="w-full rounded-lg border border-white/10 bg-zinc-900/70 px-3 py-2 text-[11px] text-zinc-100 outline-none focus:border-blue-500/50" />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/5 bg-zinc-950/40 p-4">
+                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Inputs</div>
+                      {selected.inputs.length === 0 ? (
+                        <div className="mt-3 text-[10px] text-zinc-500">No inputs defined yet in <span className="font-mono">{selected.metaRelativePath}</span>.</div>
+                      ) : (
+                        <div className="mt-3 space-y-3">
+                          {selected.inputs.map((i) => {
+                            const options = assetsForInput(assets, i);
+                            return (
+                              <div key={i.key} className="rounded-xl border border-white/5 bg-zinc-900/40 p-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="text-[11px] font-bold text-zinc-100 truncate">{i.label}</div>
+                                    <div className="mt-1 text-[9px] text-zinc-500 font-mono truncate">{i.key} {i.required ? "(required)" : "(optional)"}</div>
+                                  </div>
+                                  <span className="text-[8px] px-2 py-1 rounded-md border border-white/10 bg-zinc-950/60 text-zinc-400 uppercase tracking-wider">{i.type}</span>
+                                </div>
+                                <select value={draft.inputs[i.key] ?? ""} onChange={(e) => onInput(i.key, e.target.value)} className="mt-3 w-full rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-[11px] text-zinc-100 outline-none focus:border-blue-500/50">
+                                  <option value="">{`Select ${i.type} asset${i.required ? "" : " (optional)"}`}</option>
+                                  {options.map((a) => <option key={a.id} value={a.id}>{a.originalName}</option>)}
+                                </select>
+                                {options.length === 0 && <div className="mt-2 text-[10px] text-zinc-500">No compatible {i.type} assets in this project yet.</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
 
                 {(validation.issues.length > 0 || sendState.status !== "idle") && (
                   <div className="rounded-2xl border border-white/5 bg-zinc-950/30 p-4 text-[10px]">
@@ -1004,7 +1082,13 @@ export default function WorkflowStudioView() {
                     </div>
                   ) : (
                     <div className="mt-3 space-y-2">
-                      {sortedFilteredWorkflowRuns.map((run) => (
+                      {sortedFilteredWorkflowRuns.map((run) => {
+                        const autoImportedPaths = autoImportedOutputPathsByRunId[run.id] ?? [];
+                        const autoImportedSet = new Set(autoImportedPaths);
+                        const importableOutputCount = run.outputPaths.filter((path) => canImportOutputPath(path)).length;
+                        const autoImportedOutputCount = run.outputPaths.filter((path) => autoImportedSet.has(path)).length;
+
+                        return (
                         <div key={run.id} className="rounded-xl border border-white/5 bg-zinc-900/40 p-3">
                           <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
@@ -1096,8 +1180,15 @@ export default function WorkflowStudioView() {
                           {run.outputPaths.length > 0 && (
                             <div className="mt-2 rounded-md border border-emerald-500/10 bg-emerald-500/5 p-2">
                               <div className="flex items-center justify-between gap-2">
-                                <div className="text-[9px] uppercase tracking-wider text-emerald-300 font-bold">
-                                  Outputs ({run.outputPaths.length})
+                                <div>
+                                  <div className="text-[9px] uppercase tracking-wider text-emerald-300 font-bold">
+                                    Outputs ({run.outputPaths.length})
+                                  </div>
+                                  {importableOutputCount > 0 && (
+                                    <div className={`mt-1 text-[8px] uppercase tracking-wider font-bold ${autoImportedOutputCount >= importableOutputCount ? "text-emerald-300" : "text-blue-300"}`}>
+                                      Auto-imported {autoImportedOutputCount}/{importableOutputCount}
+                                    </div>
+                                  )}
                                 </div>
                                 <button
                                   onClick={() => {
@@ -1116,6 +1207,11 @@ export default function WorkflowStudioView() {
                                     <div className="font-mono text-[9px] text-emerald-100/80 truncate flex-1 min-w-0">
                                       {outputPath}
                                     </div>
+                                    {autoImportedSet.has(outputPath) && (
+                                      <span className="shrink-0 px-1.5 py-0.5 rounded-md border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 text-[8px] font-black uppercase tracking-wider">
+                                        Auto
+                                      </span>
+                                    )}
                                     <button
                                       onClick={() => {
                                         void onImportOutput(outputPath);
@@ -1151,7 +1247,8 @@ export default function WorkflowStudioView() {
                             </div>
                           )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1256,7 +1353,11 @@ function mergeDraft(w: WorkflowCatalogEntry, d?: Draft): Draft {
   };
 }
 
-function validate(w: WorkflowCatalogEntry, d: Draft, assets: Asset[]): Validation {
+function mergeInputConnections(w: WorkflowCatalogEntry, current?: Record<string, boolean>): Record<string, boolean> {
+  return Object.fromEntries(w.inputs.map((input) => [input.key, current?.[input.key] ?? true])) as Record<string, boolean>;
+}
+
+function validate(w: WorkflowCatalogEntry, d: Draft, assets: Asset[], inputConnections?: Record<string, boolean>): Validation {
   const issues: string[] = [];
   const nums = parseNums(d.settings, issues);
   const requestInputs: Record<string, string> = {};
@@ -1264,6 +1365,14 @@ function validate(w: WorkflowCatalogEntry, d: Draft, assets: Asset[]): Validatio
   w.inputs.forEach((i) => {
     if (!i.key.endsWith("AssetId")) {
       issues.push(`Input-Key "${i.key}" endet nicht auf "AssetId" (Meta-Konvention verletzt).`);
+    }
+
+    const connected = inputConnections?.[i.key] !== false;
+    if (!connected) {
+      if (i.required) {
+        issues.push(`Pflicht-Input "${i.label}" ist nicht verbunden.`);
+      }
+      return;
     }
 
     const value = (d.inputs[i.key] ?? "").trim();

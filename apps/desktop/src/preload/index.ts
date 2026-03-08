@@ -4,11 +4,17 @@ import { IPC_CHANNELS } from '@ai-filmstudio/shared';
 import type { AssetImportResponse, AudioWaveformResponse } from '@shared/ipc/assets';
 import type { FfmpegHealthResponse, ProxyResponse } from '@shared/ipc/ffmpeg';
 import type {
+  AnalyzeImageWithOllamaRequest,
+  AnalyzeImageWithOllamaResponse,
   ComfyGalleryListRequest,
   ComfyGalleryListResponse,
   CreateComfyGalleryFolderRequest,
   CreateComfyGalleryFolderResponse,
+  ProjectAutosaveListResponse,
   ProjectResponse,
+  RevealPreviewSnapshotRequest,
+  RevealPreviewSnapshotResponse,
+  SaveProjectReason,
   SavePreviewSnapshotRequest,
   SavePreviewSnapshotResponse,
   WorkflowPresetsResponse,
@@ -33,11 +39,20 @@ contextBridge.exposeInMainWorld('projectApi', {
   newProject: async (): Promise<ProjectResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.new) as Promise<ProjectResponse>;
   },
-  saveProject: async (project: Project): Promise<ProjectResponse> => {
-    return ipcRenderer.invoke(IPC_CHANNELS.project.save, project) as Promise<ProjectResponse>;
+  saveProject: async (project: Project, reason?: SaveProjectReason): Promise<ProjectResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.save, project, reason) as Promise<ProjectResponse>;
   },
   loadProject: async (): Promise<ProjectResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.load) as Promise<ProjectResponse>;
+  },
+  restoreLastSession: async (): Promise<ProjectResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.restoreLastSession) as Promise<ProjectResponse>;
+  },
+  listProjectAutosaves: async (): Promise<ProjectAutosaveListResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.listAutosaves) as Promise<ProjectAutosaveListResponse>;
+  },
+  restoreProjectAutosave: async (fileName: string): Promise<ProjectResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.restoreAutosave, fileName) as Promise<ProjectResponse>;
   },
   importVideo: async (): Promise<AssetImportResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.importVideo) as Promise<AssetImportResponse>;
@@ -56,6 +71,9 @@ contextBridge.exposeInMainWorld('projectApi', {
   },
   savePreviewSnapshot: async (request: SavePreviewSnapshotRequest): Promise<SavePreviewSnapshotResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.savePreviewSnapshot, request) as Promise<SavePreviewSnapshotResponse>;
+  },
+  revealPreviewSnapshot: async (request: RevealPreviewSnapshotRequest): Promise<RevealPreviewSnapshotResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.revealPreviewSnapshot, request) as Promise<RevealPreviewSnapshotResponse>;
   },
   createComfyGalleryFolder: async (request: CreateComfyGalleryFolderRequest): Promise<CreateComfyGalleryFolderResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.createComfyGalleryFolder, request) as Promise<CreateComfyGalleryFolderResponse>;
@@ -92,6 +110,9 @@ contextBridge.exposeInMainWorld('projectApi', {
   },
   getAudioWaveformPeaks: async (relativeAudioPath: string, bins: number): Promise<AudioWaveformResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.project.audioWaveformPeaks, relativeAudioPath, bins) as Promise<AudioWaveformResponse>;
+  },
+  analyzeImageWithOllama: async (request: AnalyzeImageWithOllamaRequest): Promise<AnalyzeImageWithOllamaResponse> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.project.analyzeImageWithOllama, request) as Promise<AnalyzeImageWithOllamaResponse>;
   },
   getComfyHealth: async (request?: ComfyHealthRequest): Promise<ComfyHealthResponse> => {
     return ipcRenderer.invoke(IPC_CHANNELS.comfy.health, request) as Promise<ComfyHealthResponse>;

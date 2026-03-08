@@ -10,6 +10,7 @@ export const selectTimelineDockStoreState = (state: StudioState) => ({
   setCurrentTime: state.setCurrentTime,
   addTrack: state.addTrack,
   dropAssetToTimeline: state.dropAssetToTimeline,
+  timelineAddClip: state.timelineAddClip,
   selectClip: state.selectClip,
   clearClipSelection: state.clearClipSelection,
   nudgeSelectedClip: state.nudgeSelectedClip,
