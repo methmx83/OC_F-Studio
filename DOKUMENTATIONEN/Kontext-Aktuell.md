@@ -1,6 +1,6 @@
 ﻿# Projektkontext - Laufender Snapshot
 
-Letzte Aktualisierung: 2026-02-28
+Letzte Aktualisierung: 2026-03-08
 Quelle: Repository-Scan (apps/desktop, packages/shared, DOKUMENTATIONEN)
 
 ## Pflicht-Format (kurz)
@@ -91,6 +91,8 @@ Hinweis: Detailrichtlinie in `DOKU_STANDARD.md`.
 - User-Setup konkret verifiziert (Projekt `WSG`): reale API-Workflows liegen unter `D:\\AFS_Projects\\Projects\\WSG\\workflows\\videos\\` und `...\\images\\`; `audio\\` ist aktuell bewusst leer bis Audio-Asset-Support umgesetzt wird.
 - Wichtig fuer den Katalog-Loader: Ordnernamen muessen aktuell exakt `videos`, `images`, `audio` (Plural/Lowercase) sein; API-Dateien werden als `*.api.json` erwartet.
 - Meta-JSON-Fallen sind mit User abgestimmt/geprueft: `inputs[].key` darf nicht direkt `...AssetAbsPath` sein (sondern `...AssetId`), und JSON-Dateien muessen strikt valide sein (kein trailing comma in Arrays/Objekten).
+- Autosave/Restore-UX ist gehaertet: In `Settings` gibt es jetzt ein klares `Restore Center` mit `Restore Last Session`, Autosave-Liste und `Restore Autosave` pro Snapshot inkl. Confirm-Warnung, UI-Status (`success/error/info`) und Disable-States.
+- Preset-Conflict-Handling im Workflow-Studio ist gehaertet: Konfliktzustand ist jetzt workflow-spezifisch und nur dann sichtbar, wenn aktuell relevant; Konfliktaufloesung bietet explizit `Lokale Aenderungen behalten` oder `Datei neu laden`, mit robusten Disable-States und konsistenter Preset-Auswahl-Synchronisation.
 
 ## Offene Kernaufgaben
 - Snapping/Cut/Ripple/Slip als Basis-NLE-Operationen sind integriert; naechster Fokus ist Persistenz-Haertung und weitere Editor-Funktionen.
@@ -101,6 +103,8 @@ Hinweis: Detailrichtlinie in `DOKU_STANDARD.md`.
 - Keine offene Timeline-v1/v2-Inkonsistenz mehr in `core/model/timeline.ts` (auf `tracks[]` migriert).
 
 ## Aufgabenjournal
+- 2026-03-08: Preset-Conflict-Hardening-Block umgesetzt. In `WorkflowStudioView` wurde der Konflikt-Flow deterministisch gehaertet (strukturierter `PresetConflictState`, Guard gegen ungewollte Persist-Loops, konfliktbezogene Resolve-Aktionen `Lokale Aenderungen behalten` / `Datei neu laden`). Konfliktbanner wird nur workflow-relevant angezeigt; Preset-Auswahl und Name werden nach Save/Reload/Delete konsistent gehalten. Verifikation komplett gruen: `npm run lint`, `npm run typecheck`, `npm run build`, `npm run validate:workflows`.
+- 2026-03-08: Stabilitaetsblock `Autosave + Restore UX` umgesetzt. `SettingsView` wurde um ein klares Restore-Center erweitert (Last-Session-Restore, Autosave-Liste, Restore pro Eintrag). Safe-Restore-Flow mit Confirm vor Restore, expliziten Statusmeldungen nach Restore und gehaerteten Disable-States umgesetzt; bestehender Autosave-Dialog ebenfalls um Confirm/Disable-Haertung erweitert. Store-Signatur `restoreLastSession` auf `Promise<boolean>` angehoben. Verifikation komplett gruen: `npm run lint`, `npm run typecheck`, `npm run build`, `npm run validate:workflows`.
 - 2026-02-28: Doku-Synchronisierung abgeschlossen (`Kontext-Aktuell.md`, `Refactor_process.md`) auf Basis der umgesetzten Punkte: `Import all outputs`, `npm run validate:workflows`, Audio end-to-end inkl. Preview-Metering/Multi-Audio, echte Waveform-Peaks mit Cache/Prefetch, Timeline-Audio (`Clear M/S`, `Clip.gain`, `automation.gain[]`).
 - 2026-02-27: User hat den manuellen Smoke nach PR12 vollstaendig bestaetigt: `New Project`, `Import Video`, `Preview`, `Proxy Toggle`, `WF Studio`, `Comfy Health` ohne Fehler, alles weiterhin stabil.
 - 2026-02-27: PR12-Supplement-Smoke dokumentiert: Vorbereitung gemaess `scripts/smoke.md` (`npm install`, Shared-Build, Desktop-Typecheck, Desktop-Build) vollstaendig gruen. Im Agent-Environment war `ELECTRON_RUN_AS_NODE=1` gesetzt und erzeugte initial einen falschen Node-Mode-Startfehler (`cjsPreparseModuleExports`); fuer den eigentlichen Starttest wurde der Run ohne diesen Env-Flag ausgefuehrt. Vollstaendige interaktive GUI-Klickstrecke bleibt im Agent-CLI nicht direkt durchfuehrbar und ist als User-Retest offen.

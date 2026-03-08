@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlaskConical,
   Copy,
@@ -56,6 +56,12 @@ type ImportAllSummary = {
 };
 
 type WorkflowPreset = WorkflowPresetItem;
+type PresetConflictState = {
+  workflowId: string;
+  message: string;
+  remotePresets: WorkflowPresetsMap;
+  remoteUpdatedAtByWorkflow: Record<string, string>;
+};
 
 const CATS: Array<{ id: WorkflowCatalogCategory; label: string; icon: React.ReactNode }> = [
   { id: "images", label: "Images", icon: <ImageIcon size={14} /> },
@@ -118,13 +124,15 @@ export default function WorkflowStudioView() {
   const [presetsByWorkflow, setPresetsByWorkflow] = useState<Record<string, WorkflowPreset[]>>({});
   const [presetUpdatedAtByWorkflow, setPresetUpdatedAtByWorkflow] = useState<Record<string, string>>({});
   const [presetLoadWarning, setPresetLoadWarning] = useState<string | null>(null);
-  const [presetConflictMessage, setPresetConflictMessage] = useState<string | null>(null);
+  const [presetConflictState, setPresetConflictState] = useState<PresetConflictState | null>(null);
   const [presetsHydrated, setPresetsHydrated] = useState(false);
   const [isSavingPresets, setIsSavingPresets] = useState(false);
+  const [isReloadingPresets, setIsReloadingPresets] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [presetName, setPresetName] = useState("");
   const [nowTs, setNowTs] = useState(() => Date.now());
   const [autoPlaceImportedOutputs, setAutoPlaceImportedOutputs] = useState(true);
+  const skipNextPresetPersistRef = useRef(false);
 
   useEffect(() => {
     void loadCatalog();
@@ -185,6 +193,7 @@ export default function WorkflowStudioView() {
         setPresetsByWorkflow({});
         setPresetUpdatedAtByWorkflow({});
         setPresetLoadWarning(null);
+        setPresetConflictState(null);
         setPresetsHydrated(false);
         return;
       }
@@ -194,19 +203,22 @@ export default function WorkflowStudioView() {
         const response = await getIpcClient().getWorkflowPresets();
         if (isCancelled) return;
         if (response.success) {
+          skipNextPresetPersistRef.current = true;
           setPresetsByWorkflow(response.presets ?? {});
           setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
           setPresetLoadWarning((response.message || "").includes("with warnings") ? response.message : null);
-          setPresetConflictMessage(null);
+          setPresetConflictState(null);
         } else {
           setPresetsByWorkflow({});
           setPresetLoadWarning(null);
+          setPresetConflictState(null);
           setSendState({ status: "error", message: response.message || "Workflow-Presets konnten nicht geladen werden." });
         }
       } catch (error) {
         if (isCancelled) return;
         setPresetsByWorkflow({});
         setPresetLoadWarning(null);
+        setPresetConflictState(null);
         setSendState({
           status: "error",
           message: `Workflow-Presets konnten nicht geladen werden: ${error instanceof Error ? error.message : String(error)}`,
@@ -230,6 +242,14 @@ export default function WorkflowStudioView() {
 
     async function persistWorkflowPresets(): Promise<void> {
       if (!projectRoot || !presetsHydrated) return;
+      if (skipNextPresetPersistRef.current) {
+        skipNextPresetPersistRef.current = false;
+        return;
+      }
+      if (presetConflictState) {
+        return;
+      }
+
       setIsSavingPresets(true);
       try {
         const response = await getIpcClient().saveWorkflowPresets({
@@ -238,20 +258,21 @@ export default function WorkflowStudioView() {
         });
         if (isCancelled) return;
         if (response.success) {
-          setPresetConflictMessage(null);
+          setPresetConflictState(null);
           const merged = response.presets ?? {};
-          const currentJson = JSON.stringify(presetsByWorkflow);
-          const mergedJson = JSON.stringify(merged);
-          if (currentJson !== mergedJson) {
-            setPresetsByWorkflow(merged);
-          }
+          skipNextPresetPersistRef.current = true;
+          setPresetsByWorkflow(merged);
           setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
         } else {
           if ((response.message || "").includes("PRESET_CONFLICT")) {
-            setPresetsByWorkflow(response.presets ?? {});
-            setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
-            const conflictMessage = "Preset-Konflikt erkannt: Datei wurde extern geaendert. Stand wurde neu geladen, bitte Aenderung erneut speichern.";
-            setPresetConflictMessage(conflictMessage);
+            const conflictedWorkflowId = parseConflictedWorkflowId(response.message, wfId);
+            const conflictMessage = `Preset-Konflikt erkannt fuer Workflow "${conflictedWorkflowId}". Entscheide zwischen lokalem Stand und Dateistand.`;
+            setPresetConflictState({
+              workflowId: conflictedWorkflowId,
+              message: conflictMessage,
+              remotePresets: response.presets ?? {},
+              remoteUpdatedAtByWorkflow: response.updatedAtByWorkflow ?? {},
+            });
             setSendState({
               status: "error",
               message: conflictMessage,
@@ -278,7 +299,7 @@ export default function WorkflowStudioView() {
     return () => {
       isCancelled = true;
     };
-  }, [presetUpdatedAtByWorkflow, projectRoot, presetsByWorkflow, presetsHydrated]);
+  }, [presetConflictState, presetUpdatedAtByWorkflow, presetsByWorkflow, presetsHydrated, projectRoot, wfId]);
 
   useEffect(() => {
     try {
@@ -328,6 +349,31 @@ export default function WorkflowStudioView() {
   }, [filteredWorkflowRuns, runSort]);
   const workflowPresets = useMemo(() => (selected ? presetsByWorkflow[selected.id] ?? [] : []), [selected, presetsByWorkflow]);
   const expectedTemplateTokens = useMemo(() => (selected ? buildExpectedTemplateTokens(selected.inputs) : []), [selected]);
+  const activePresetConflict = useMemo(() => {
+    if (!selected || !presetConflictState) {
+      return null;
+    }
+    return presetConflictState.workflowId === selected.id ? presetConflictState : null;
+  }, [presetConflictState, selected]);
+  const isPresetConflictOperationBusy = isSavingPresets || isReloadingPresets;
+  const shouldDisablePresetInputs = isPresetConflictOperationBusy || activePresetConflict !== null;
+
+  useEffect(() => {
+    if (!selected || !selectedPresetId) {
+      return;
+    }
+
+    const selectedPreset = workflowPresets.find((preset) => preset.id === selectedPresetId);
+    if (!selectedPreset) {
+      setSelectedPresetId("");
+      setPresetName("");
+      return;
+    }
+
+    if (presetName !== selectedPreset.name) {
+      setPresetName(selectedPreset.name);
+    }
+  }, [presetName, selected, selectedPresetId, workflowPresets]);
 
   // eslint-disable-next-line no-unused-vars
   const patchDraft = (fn: (draftValue: Draft) => Draft) => {
@@ -336,12 +382,10 @@ export default function WorkflowStudioView() {
   };
 
   const onNum = (key: NumKey, value: string) => {
-    setPresetConflictMessage(null);
     patchDraft((d) => ({ ...d, settings: { ...d.settings, [key]: value } }));
   };
   const onInput = (key: string, value: string) => {
     if (!selected) return;
-    setPresetConflictMessage(null);
     patchDraft((d) => ({ ...d, inputs: { ...d.inputs, [key]: value } }));
     if (value.trim()) {
       setInputConnectionsByWorkflow((prev) => ({
@@ -355,7 +399,6 @@ export default function WorkflowStudioView() {
   };
   const onInputConnectionChange = (key: string, connected: boolean) => {
     if (!selected) return;
-    setPresetConflictMessage(null);
     setInputConnectionsByWorkflow((prev) => ({
       ...prev,
       [selected.id]: {
@@ -366,7 +409,7 @@ export default function WorkflowStudioView() {
   };
 
   function onSavePreset(): void {
-    if (!selected || !draft) return;
+    if (!selected || !draft || shouldDisablePresetInputs) return;
     const name = presetName.trim();
     if (!name) {
       setSendState({ status: "error", message: "Preset-Name fehlt." });
@@ -388,28 +431,27 @@ export default function WorkflowStudioView() {
       setSelectedPresetId(nextPreset.id);
       return { ...prev, [selected.id]: nextList.slice(0, 20) };
     });
-    setPresetConflictMessage(null);
+    setPresetConflictState(null);
     setSendState({ status: "success", message: "Preset gespeichert." });
   }
 
   function onApplyPreset(): void {
-    if (!selected) return;
+    if (!selected || shouldDisablePresetInputs) return;
     const preset = workflowPresets.find((p) => p.id === selectedPresetId);
     if (!preset) return;
     setDrafts((prev) => ({ ...prev, [selected.id]: mergeDraft(selected, preset.draft) }));
-    setPresetConflictMessage(null);
     setSendState({ status: "success", message: `Preset "${preset.name}" angewendet.` });
   }
 
   function onDeletePreset(): void {
-    if (!selected || !selectedPresetId) return;
+    if (!selected || !selectedPresetId || shouldDisablePresetInputs) return;
     setPresetsByWorkflow((prev) => {
       const current = prev[selected.id] ?? [];
       return { ...prev, [selected.id]: current.filter((p) => p.id !== selectedPresetId) };
     });
     setSelectedPresetId("");
     setPresetName("");
-    setPresetConflictMessage(null);
+    setPresetConflictState(null);
     setSendState({ status: "success", message: "Preset geloescht." });
   }
 
@@ -484,27 +526,86 @@ export default function WorkflowStudioView() {
   }
 
   async function onReloadWorkflowPresets(): Promise<void> {
-    if (!projectRoot) {
+    if (!projectRoot || isReloadingPresets || isSavingPresets) {
       return;
     }
 
+    setIsReloadingPresets(true);
     try {
+      if (presetConflictState) {
+        skipNextPresetPersistRef.current = true;
+        setPresetsByWorkflow(presetConflictState.remotePresets);
+        setPresetUpdatedAtByWorkflow(presetConflictState.remoteUpdatedAtByWorkflow);
+        setPresetLoadWarning(null);
+        setPresetConflictState(null);
+        setSendState({ status: "success", message: "Dateistand aus Konflikt uebernommen." });
+        return;
+      }
+
       const response = await getIpcClient().getWorkflowPresets();
       if (!response.success) {
         setSendState({ status: "error", message: response.message || "Workflow-Presets konnten nicht neu geladen werden." });
         return;
       }
 
+      skipNextPresetPersistRef.current = true;
       setPresetsByWorkflow(response.presets ?? {});
       setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
       setPresetLoadWarning((response.message || "").includes("with warnings") ? response.message : null);
-      setPresetConflictMessage(null);
-      setSendState({ status: "success", message: "Workflow-Presets neu geladen." });
+      setPresetConflictState(null);
+      setSendState({ status: "success", message: "Workflow-Presets aus Datei uebernommen." });
     } catch (error) {
       setSendState({
         status: "error",
         message: `Workflow-Presets neu laden fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`,
       });
+    } finally {
+      setIsReloadingPresets(false);
+    }
+  }
+
+  async function onKeepLocalPresetChanges(): Promise<void> {
+    if (!presetConflictState || isSavingPresets || isReloadingPresets) {
+      return;
+    }
+
+    setIsSavingPresets(true);
+    try {
+      const response = await getIpcClient().saveWorkflowPresets({
+        presets: presetsByWorkflow as WorkflowPresetsMap,
+        expectedUpdatedAtByWorkflow: presetConflictState.remoteUpdatedAtByWorkflow,
+      });
+
+      if (response.success) {
+        skipNextPresetPersistRef.current = true;
+        setPresetsByWorkflow(response.presets ?? {});
+        setPresetUpdatedAtByWorkflow(response.updatedAtByWorkflow ?? {});
+        setPresetConflictState(null);
+        setSendState({ status: "success", message: "Lokale Preset-Aenderungen gespeichert." });
+        return;
+      }
+
+      if ((response.message || "").includes("PRESET_CONFLICT")) {
+        const conflictedWorkflowId = parseConflictedWorkflowId(response.message, presetConflictState.workflowId);
+        const conflictMessage = `Preset-Konflikt bleibt bestehen fuer Workflow "${conflictedWorkflowId}". Pruefe Dateistand oder versuche erneut.`;
+        setPresetConflictState({
+          workflowId: conflictedWorkflowId,
+          message: conflictMessage,
+          remotePresets: response.presets ?? {},
+          remoteUpdatedAtByWorkflow: response.updatedAtByWorkflow ?? {},
+        });
+        setSendState({ status: "error", message: conflictMessage });
+        return;
+      }
+
+      setSendState({ status: "error", message: response.message || "Lokale Preset-Aenderungen konnten nicht gespeichert werden." });
+    } catch (error) {
+      setSendState({
+        status: "error",
+        message: `Lokale Preset-Aenderungen speichern fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    } finally {
+      setIsSavingPresets(false);
     }
   }
 
@@ -847,6 +948,7 @@ export default function WorkflowStudioView() {
                       type="text"
                       value={presetName}
                       onChange={(e) => setPresetName(e.target.value)}
+                      disabled={shouldDisablePresetInputs}
                       placeholder="Preset-Name (z. B. Fast Preview)"
                       className="w-full rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-[11px] text-zinc-100 outline-none focus:border-blue-500/50"
                     />
@@ -858,6 +960,7 @@ export default function WorkflowStudioView() {
                         const preset = workflowPresets.find((p) => p.id === id);
                         setPresetName(preset?.name ?? "");
                       }}
+                      disabled={shouldDisablePresetInputs}
                       className="w-full rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-[11px] text-zinc-100 outline-none focus:border-blue-500/50"
                     >
                       <option value="">Preset waehlen...</option>
@@ -865,13 +968,13 @@ export default function WorkflowStudioView() {
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
-                    <button onClick={onApplyPreset} disabled={!selectedPresetId || isSavingPresets} className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-950/60 text-[9px] font-black uppercase tracking-wider text-zinc-300 disabled:opacity-40">
+                    <button onClick={onApplyPreset} disabled={!selectedPresetId || shouldDisablePresetInputs} className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-950/60 text-[9px] font-black uppercase tracking-wider text-zinc-300 disabled:opacity-40">
                       Apply
                     </button>
-                    <button onClick={onSavePreset} disabled={isSavingPresets} className="px-3 py-2 rounded-lg border border-emerald-400/20 bg-emerald-400/10 text-[9px] font-black uppercase tracking-wider text-emerald-200 disabled:opacity-40">
-                      {isSavingPresets ? "Saving..." : "Save"}
+                    <button onClick={onSavePreset} disabled={shouldDisablePresetInputs} className="px-3 py-2 rounded-lg border border-emerald-400/20 bg-emerald-400/10 text-[9px] font-black uppercase tracking-wider text-emerald-200 disabled:opacity-40">
+                      {isPresetConflictOperationBusy ? "Saving..." : "Save"}
                     </button>
-                    <button onClick={onDeletePreset} disabled={!selectedPresetId || isSavingPresets} className="px-3 py-2 rounded-lg border border-red-400/20 bg-red-400/10 text-[9px] font-black uppercase tracking-wider text-red-200 disabled:opacity-40">
+                    <button onClick={onDeletePreset} disabled={!selectedPresetId || shouldDisablePresetInputs} className="px-3 py-2 rounded-lg border border-red-400/20 bg-red-400/10 text-[9px] font-black uppercase tracking-wider text-red-200 disabled:opacity-40">
                       Delete
                     </button>
                   </div>
@@ -1012,19 +1115,29 @@ export default function WorkflowStudioView() {
                   </div>
                 )}
 
-                {presetConflictMessage && (
+                {activePresetConflict && (
                   <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-[10px] text-red-200">
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <div className="font-black uppercase tracking-wider text-[9px]">Preset Conflict</div>
-                        <div className="mt-1 text-red-100/90">{presetConflictMessage}</div>
+                        <div className="mt-1 text-red-100/90">{activePresetConflict.message}</div>
                       </div>
-                      <button
-                        onClick={() => { void onReloadWorkflowPresets(); }}
-                        className="px-2 py-1 rounded-md border border-red-300/30 bg-red-400/15 text-[8px] font-black uppercase tracking-wider text-red-100"
-                      >
-                        Neu laden
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => { void onKeepLocalPresetChanges(); }}
+                          disabled={isPresetConflictOperationBusy}
+                          className="px-2 py-1 rounded-md border border-emerald-300/30 bg-emerald-400/15 text-[8px] font-black uppercase tracking-wider text-emerald-100 disabled:opacity-40"
+                        >
+                          {isSavingPresets ? "Speichert..." : "Lokale Aenderungen behalten"}
+                        </button>
+                        <button
+                          onClick={() => { void onReloadWorkflowPresets(); }}
+                          disabled={isPresetConflictOperationBusy}
+                          className="px-2 py-1 rounded-md border border-red-300/30 bg-red-400/15 text-[8px] font-black uppercase tracking-wider text-red-100 disabled:opacity-40"
+                        >
+                          {isReloadingPresets ? "Laedt..." : "Datei neu laden"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1426,6 +1539,12 @@ function parseNums(s: Record<NumKey, string>, issues: string[]): Record<NumKey, 
 
 function assetsForInput(assets: Asset[], input: WorkflowMetaInputDefinition): Asset[] {
   return assets.filter((a) => a.type === input.type).slice().sort((a, b) => a.originalName.localeCompare(b.originalName));
+}
+
+function parseConflictedWorkflowId(message: string, fallbackWorkflowId: string): string {
+  const match = message.match(/Workflow "([^"]+)"/i);
+  const parsed = match?.[1]?.trim() ?? "";
+  return parsed || fallbackWorkflowId;
 }
 
 function makeRunId(): string {

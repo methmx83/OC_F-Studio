@@ -6,6 +6,71 @@ Refactor-/Modularisierungsarbeiten werden ab jetzt getrennt in `DOKUMENTATIONEN/
 
 Diese Datei bleibt fuer abgeschlossene Features, Hotfixes und funktionale Erweiterungen.
 
+## Aufgabe 37 - Preset Conflict Hardening (Workflow-Studio)
+
+Der Preset-Konflikt-Flow wurde technisch und in der UX gehaertet, um bei extern/parallelen Dateiaenderungen deterministisch und ohne haengende UI-Zustaende zu reagieren.
+
+Umgesetzt:
+- Datei: `apps/desktop/src/renderer/src/features/workflows/WorkflowStudioView.tsx`
+  - Konflikt-Handling von loser Message auf strukturierten `PresetConflictState` umgestellt
+  - Konfliktbanner nur noch workflow-relevant angezeigt (kein alter/inkonsistenter Banner fuer unbeteiligte Workflows)
+  - Resolve-UX erweitert:
+    - `Lokale Aenderungen behalten`
+    - `Datei neu laden`
+  - Konflikt-Operationen mit Disable-States gehaertet (`isSavingPresets` / `isReloadingPresets`)
+  - Persistenz-Haertung:
+    - Guard gegen ungewollte Persist-Loops nach Reload/Hydration (`skipNextPresetPersistRef`)
+    - Kein stilles Ueberschreiben lokaler Aenderungen bei Konflikt
+  - State-Konsistenz:
+    - Auswahl-/Name-Synchronisation fuer Presets nach Save/Reload/Delete
+    - keine haengenden `selectedPresetId`/`presetName`-Kombinationen bei entfernten Presets
+
+Wirkung:
+- Konflikte sind klarer, reproduzierbar und sauber aufloesbar.
+- Lokaler und Dateistand werden explizit getrennt behandelt.
+- UI bleibt nach Save/Reload/Apply/Delete konsistent.
+
+Verifiziert:
+- `npm run lint` -> OK
+- `npm run typecheck` -> OK
+- `npm run build` -> OK
+- `npm run validate:workflows` -> OK
+
+## Aufgabe 36 - Autosave + Restore UX (Stabilitaetsblock)
+
+Der naechste Stabilitaetsblock fuer Projektwiederherstellung wurde umgesetzt: Restore ist jetzt als klarer UI-Flow verfuegbar, mit Confirm vor Restore, sichtbarem Ergebnisstatus und gehaerteten Disable-States.
+
+Umgesetzt:
+- Datei: `apps/desktop/src/renderer/src/ui/layout/AppShell.tsx`
+  - `SettingsView` um `Restore Center` erweitert:
+    - `Restore Last Session`
+    - `Refresh Autosaves`
+    - Autosave-Liste mit `Restore Autosave` pro Eintrag
+  - klarer Safe-Restore-Flow:
+    - Confirm-Dialog vor Last-Session- und Autosave-Restore
+    - explizites Status-Feedback (`success/error/info`) mit Grundtext
+  - UX-Haertung:
+    - Disable-States waehrend Listen-/Restore-Operationen
+    - bestaehender Header-Autosave-Dialog ebenfalls mit Confirm + Disable-Haertung
+- Datei: `apps/desktop/src/renderer/src/core/store/slices/projectSlice.ts`
+  - `restoreLastSession` liefert jetzt `boolean` fuer klare UI-Erfolg/Fehlschlag-Auswertung
+- Datei: `apps/desktop/src/renderer/src/core/store/studioStore.ts`
+  - Store-Signatur angepasst: `restoreLastSession: () => Promise<boolean>`
+- Doku:
+  - `DOKUMENTATIONEN/2026-03-08-Autosave-Restore-UX.md` neu angelegt
+  - `DOKUMENTATIONEN/Kontext-Aktuell.md` aktualisiert
+
+Wirkung:
+- Restore-Funktionen sind im UI klar auffindbar und direkt bedienbar.
+- Restore startet nicht mehr ohne explizite Nutzerbestaetigung bei manuellen Aktionen.
+- Fehler und Erfolgsfaelle sind fuer den User sichtbar und nachvollziehbar.
+
+Verifiziert:
+- `npm run lint` -> OK
+- `npm run typecheck` -> OK
+- `npm run build` -> OK
+- `npm run validate:workflows` -> OK
+
 ## Aufgabe 35 - PR12 Supplement: Smoke-Check-Durchlauf dokumentiert
 
 Der angefragte Smoke-Nachlauf zu PR12 wurde entlang `scripts/smoke.md` durchgefuehrt und dokumentiert.
