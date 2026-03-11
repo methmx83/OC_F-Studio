@@ -29,6 +29,8 @@ type ComfySliceKeys =
 
 let comfyRunEventUnsubscribe: (() => void) | null = null;
 const COMFY_BASE_URL_STORAGE_KEY = 'ai-filmstudio.comfy.baseUrl';
+const COMFY_RECENT_RUNS_STORAGE_KEY = 'ai-filmstudio.comfy.recentRuns';
+const COMFY_AUTO_IMPORTED_OUTPUTS_STORAGE_KEY = 'ai-filmstudio.comfy.autoImportedOutputs';
 const AUTO_IMPORTED_COMFY_OUTPUT_KEY_LIMIT = 500;
 const autoImportedComfyOutputKeys = new Set<string>();
 const COMFY_IMPORTABLE_OUTPUT_EXTENSIONS = [
@@ -43,6 +45,65 @@ function readStoredComfyBaseUrl(): string {
     return raw ?? '';
   } catch {
     return '';
+  }
+}
+
+function readStoredQueuedWorkflowRuns(): StudioState['queuedWorkflowRuns'] {
+  try {
+    const raw = globalThis.localStorage?.getItem(COMFY_RECENT_RUNS_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter((entry) => typeof entry === 'object' && entry !== null) as StudioState['queuedWorkflowRuns'];
+  } catch {
+    return [];
+  }
+}
+
+function readStoredAutoImportedOutputs(): StudioState['autoImportedOutputPathsByRunId'] {
+  try {
+    const raw = globalThis.localStorage?.getItem(COMFY_AUTO_IMPORTED_OUTPUTS_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) {
+      return {};
+    }
+
+    const map: StudioState['autoImportedOutputPathsByRunId'] = {};
+    Object.entries(parsed as Record<string, unknown>).forEach(([runId, value]) => {
+      if (!Array.isArray(value)) {
+        return;
+      }
+      map[runId] = value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+    });
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+function persistComfyRecentRuns(runs: StudioState['queuedWorkflowRuns']): void {
+  try {
+    globalThis.localStorage?.setItem(COMFY_RECENT_RUNS_STORAGE_KEY, JSON.stringify(runs.slice(0, 80)));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function persistComfyAutoImportedOutputs(map: StudioState['autoImportedOutputPathsByRunId']): void {
+  try {
+    globalThis.localStorage?.setItem(COMFY_AUTO_IMPORTED_OUTPUTS_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore storage errors
   }
 }
 
@@ -74,8 +135,8 @@ export function createComfySlice(
   return {
     comfyOnline: false,
     comfyBaseUrl: readStoredComfyBaseUrl(),
-    queuedWorkflowRuns: [],
-    autoImportedOutputPathsByRunId: {},
+    queuedWorkflowRuns: readStoredQueuedWorkflowRuns(),
+    autoImportedOutputPathsByRunId: readStoredAutoImportedOutputs(),
 
     setComfyBaseUrl: (url) => {
       const normalized = url.trim();
@@ -126,7 +187,13 @@ export function createComfySlice(
       try {
         const ipc = getIpcClient();
         comfyRunEventUnsubscribe = ipc.onComfyRunEvent((event) => {
-          set((state) => deps.applyComfyRunEventState(state, event));
+          set((state) => {
+            const nextPartial = deps.applyComfyRunEventState(state, event);
+            if (nextPartial.queuedWorkflowRuns) {
+              persistComfyRecentRuns(nextPartial.queuedWorkflowRuns);
+            }
+            return nextPartial;
+          });
 
           if (event.status !== 'success' || event.outputPaths.length === 0) {
             return;
@@ -161,11 +228,14 @@ export function createComfySlice(
                     return state;
                   }
 
+                  const nextMap = {
+                    ...state.autoImportedOutputPathsByRunId,
+                    [event.runId]: [...existing, outputPath],
+                  };
+                  persistComfyAutoImportedOutputs(nextMap);
+
                   return {
-                    autoImportedOutputPathsByRunId: {
-                      ...state.autoImportedOutputPathsByRunId,
-                      [event.runId]: [...existing, outputPath],
-                    },
+                    autoImportedOutputPathsByRunId: nextMap,
                   };
                 });
               } catch (error) {

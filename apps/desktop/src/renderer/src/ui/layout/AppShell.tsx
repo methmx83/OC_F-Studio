@@ -33,13 +33,21 @@ import { readShareSnapshotMetrics, recordShareSnapshotMetric } from "../../core/
 import { selectAppShellStoreState } from "../../core/store/selectors";
 import { useStudioStore } from "../../core/store/studioStore";
 
-function SettingsView() {
+interface SettingsViewProps {
+  hasProject: boolean;
+  isProjectBusy: boolean;
+  projectMessage: string;
+  lastError: string | null;
+  onRestoreLastSession: () => void;
+  onOpenAutosaveDialog: () => void;
+}
+
+function SettingsView(props: SettingsViewProps) {
   const {
     assetsCount,
     trackCount,
     clipCount,
     queuedRunCount,
-    isProjectBusy,
     proxyPendingCount,
   } = useStudioStore(
     useShallow((state) => ({
@@ -47,7 +55,6 @@ function SettingsView() {
       trackCount: state.timeline.tracks.length,
       clipCount: state.timeline.tracks.reduce((total, track) => total + track.clips.length, 0),
       queuedRunCount: state.queuedWorkflowRuns.filter((run) => run.status === "pending" || run.status === "running").length,
-      isProjectBusy: state.isProjectBusy,
       proxyPendingCount: Object.values(state.proxyPendingByAssetId).filter(Boolean).length,
     })),
   );
@@ -116,6 +123,34 @@ function SettingsView() {
       <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400">
         Performance Inspector
       </h2>
+      <div className="mt-4 rounded-xl border border-zinc-800 bg-[#111114] px-4 py-3">
+        <div className="text-[8px] uppercase tracking-[0.15em] text-zinc-500">Recovery</div>
+        <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
+          Restore session or autosave snapshots. If restore fails, use the shown next-step hint before retrying.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={props.onRestoreLastSession}
+            disabled={props.isProjectBusy}
+            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+          >
+            Restore Last Session
+          </button>
+          <button
+            type="button"
+            onClick={() => void props.onOpenAutosaveDialog()}
+            disabled={props.isProjectBusy || !props.hasProject}
+            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+            title={props.hasProject ? "Open autosave snapshot restore" : "Load or create a project first"}
+          >
+            Restore Autosave
+          </button>
+        </div>
+        <p className="mt-3 text-[10px] text-zinc-500">
+          {props.lastError ? `Last restore error: ${props.lastError}` : `Status: ${props.projectMessage}`}
+        </p>
+      </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 text-[10px]">
         <PerfCard label="FPS (avg)" value={String(fps)} />
@@ -125,7 +160,7 @@ function SettingsView() {
         <PerfCard label="Tracks" value={String(trackCount)} />
         <PerfCard label="Queued Runs" value={String(queuedRunCount)} />
         <PerfCard label="Proxy Jobs" value={String(proxyPendingCount)} />
-        <PerfCard label="Project Busy" value={isProjectBusy ? "YES" : "NO"} />
+        <PerfCard label="Project Busy" value={props.isProjectBusy ? "YES" : "NO"} />
         <PerfCard
           label="JS Heap"
           value={heapUsedMb === null || heapTotalMb === null ? "n/a" : `${heapUsedMb} / ${heapTotalMb} MB`}
@@ -210,6 +245,7 @@ export default function AppShell() {
   const [autosaveSnapshots, setAutosaveSnapshots] = useState<ProjectAutosaveSnapshot[]>([]);
   const [selectedAutosaveFileName, setSelectedAutosaveFileName] = useState<string | null>(null);
   const [autosaveFilter, setAutosaveFilter] = useState<AutosaveFilter>("all");
+  const [autosaveRestoreError, setAutosaveRestoreError] = useState<string | null>(null);
   const [shareSnapshotStatus, setShareSnapshotStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
   const [openSnapshotStatus, setOpenSnapshotStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
   const [shareMetrics, setShareMetrics] = useState<ShareSnapshotMetrics>(() => readShareSnapshotMetrics());
@@ -391,6 +427,7 @@ export default function AppShell() {
       return;
     }
 
+    setAutosaveRestoreError(null);
     setIsAutosaveDialogBusy(true);
     const response = await listProjectAutosaves();
     setIsAutosaveDialogBusy(false);
@@ -424,6 +461,7 @@ export default function AppShell() {
     setAutosaveSnapshots([]);
     setSelectedAutosaveFileName(null);
     setAutosaveFilter("all");
+    setAutosaveRestoreError(null);
   };
 
   const handleRestoreSelectedAutosave = async () => {
@@ -438,7 +476,28 @@ export default function AppShell() {
 
     if (success) {
       closeAutosaveDialog();
+      return;
     }
+
+    setAutosaveRestoreError(useStudioStore.getState().lastError ?? "Restore failed. Next step: select another snapshot and retry.");
+  };
+
+  const handleRestoreLastSessionFromSettings = () => {
+    if (isProjectBusy) {
+      return;
+    }
+
+    const isConfirmAvailable = typeof globalThis.confirm === "function";
+    if (hasProject && isConfirmAvailable) {
+      const confirmed = globalThis.confirm(
+        "Restore last session and replace the current project state in memory?",
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    void restoreLastSession();
   };
 
   const handleShareSnapshot = () => {
@@ -671,14 +730,16 @@ export default function AppShell() {
       </header>
 
       {lastError && (
-        <div className="h-8 shrink-0 bg-red-500/10 border-b border-red-500/30 text-red-300 text-[10px] px-6 flex items-center justify-between">
-          <span className="truncate">{lastError}</span>
+        <div className="min-h-8 shrink-0 bg-red-500/10 border-b border-red-500/30 px-6 py-1 text-red-300 text-[10px]">
+          <div className="flex items-center justify-between gap-3">
+            <span className="leading-4">{lastError}</span>
           <button
             onClick={clearLastError}
             className="ml-4 px-2 py-1 rounded bg-red-500/20 hover:bg-red-500/30 text-[9px] uppercase tracking-widest"
           >
             Dismiss
           </button>
+          </div>
         </div>
       )}
 
@@ -716,7 +777,14 @@ export default function AppShell() {
         </div>
 
         <div className={`h-full ${activeView === "settings" ? "block" : "hidden"}`}>
-          <SettingsView />
+          <SettingsView
+            hasProject={hasProject}
+            isProjectBusy={isProjectBusy}
+            projectMessage={projectMessage}
+            lastError={lastError}
+            onRestoreLastSession={handleRestoreLastSessionFromSettings}
+            onOpenAutosaveDialog={handleOpenAutosaveDialog}
+          />
         </div>
       </main>
 
@@ -735,7 +803,10 @@ export default function AppShell() {
                   <button
                     key={filterValue}
                     type="button"
-                    onClick={() => setAutosaveFilter(filterValue)}
+                    onClick={() => {
+                      setAutosaveFilter(filterValue);
+                      setAutosaveRestoreError(null);
+                    }}
                     className={`rounded-md border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
                       autosaveFilter === filterValue
                         ? "border-blue-500 bg-blue-500/15 text-blue-200"
@@ -761,7 +832,10 @@ export default function AppShell() {
                     <button
                       key={snapshot.fileName}
                       type="button"
-                      onClick={() => setSelectedAutosaveFileName(snapshot.fileName)}
+                      onClick={() => {
+                        setSelectedAutosaveFileName(snapshot.fileName);
+                        setAutosaveRestoreError(null);
+                      }}
                       className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
                         isSelected
                           ? "border-blue-500 bg-blue-500/10"
@@ -779,6 +853,12 @@ export default function AppShell() {
                     </button>
                   );
                   })}
+                </div>
+              )}
+
+              {autosaveRestoreError && (
+                <div className="mt-3 rounded-xl border border-red-900/50 bg-red-950/20 px-3 py-2 text-[10px] leading-relaxed text-red-200">
+                  {autosaveRestoreError}
                 </div>
               )}
             </div>

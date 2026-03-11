@@ -595,6 +595,37 @@ function parseAutosaveFileName(fileName: string): { reason: ProjectSnapshotReaso
   };
 }
 
+function toErrorText(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function toErrnoCode(error: unknown): string | null {
+  const candidate = error as NodeJS.ErrnoException | null | undefined;
+  return typeof candidate?.code === 'string' ? candidate.code : null;
+}
+
+function toReadFailureMessage(subject: string, filePath: string, error: unknown, nextStep: string): string {
+  const code = toErrnoCode(error);
+  if (code === 'ENOENT') {
+    return `${subject} is missing: ${filePath}. Next step: ${nextStep}`;
+  }
+  if (code === 'EACCES' || code === 'EPERM') {
+    return `${subject} is not readable (permission denied): ${filePath}. Next step: ${nextStep}`;
+  }
+  return `${subject} could not be read: ${toErrorText(error)}. Next step: ${nextStep}`;
+}
+
+function toInvalidJsonMessage(subject: string, filePath: string, nextStep: string): string {
+  return `${subject} is corrupted (invalid JSON): ${filePath}. Next step: ${nextStep}`;
+}
+
+function toInvalidProjectStructureMessage(subject: string, details: string, nextStep: string): string {
+  return `${subject} has invalid project structure: ${details}. Next step: ${nextStep}`;
+}
+
 async function writeProjectAutosaveSnapshot(projectRoot: string, project: Project, reason: SaveProjectReason): Promise<void> {
   const autosaveDirectory = resolveProjectPath(projectRoot, AUTOSAVE_DIRECTORY_RELATIVE_PATH);
   await fs.mkdir(autosaveDirectory, { recursive: true });
@@ -684,51 +715,89 @@ async function restoreProjectAutosave(fileName: string): Promise<ProjectResponse
   if (!currentProjectRoot) {
     return {
       success: false,
-      message: 'No ProjectRoot set. Create or load a project first.',
+      message: 'No ProjectRoot set. Create or load a project first. Next step: open a project and retry autosave restore.',
     };
   }
 
   const trimmed = fileName.trim();
   if (!isValidAutosaveFileName(trimmed)) {
-    return { success: false, message: `Invalid autosave file name: ${fileName}` };
+    return {
+      success: false,
+      message: `Invalid autosave file name: ${fileName}. Next step: refresh autosaves and choose a listed snapshot.`,
+    };
   }
 
   const projectRoot = currentProjectRoot;
   const autosaveDirectory = resolveProjectPath(projectRoot, AUTOSAVE_DIRECTORY_RELATIVE_PATH);
   const snapshotPath = path.join(autosaveDirectory, trimmed);
   if (!existsSync(snapshotPath)) {
-    return { success: false, message: `Autosave snapshot not found: ${trimmed}` };
+    return {
+      success: false,
+      message: `Autosave snapshot not found: ${trimmed}. Next step: refresh autosaves and select an available snapshot.`,
+    };
   }
 
+  let content = '';
   try {
-    const content = await fs.readFile(snapshotPath, 'utf-8');
-    const parsed = JSON.parse(content) as unknown;
-    const migrated = migrateProjectToV2(parsed);
-
-    if (!validateProject(migrated)) {
-      return {
-        success: false,
-        message: `Autosave snapshot is invalid: ${ajv.errorsText(validateProject.errors)}`,
-      };
-    }
-
-    const project: Project = migrated;
-    const saveResponse = await saveProjectToCurrentRoot(project);
-    if (!saveResponse.success) {
-      return saveResponse;
-    }
-
-    return {
-      success: true,
-      message: `Restored autosave snapshot ${trimmed}`,
-      project,
-    };
+    content = await fs.readFile(snapshotPath, 'utf-8');
   } catch (error) {
     return {
       success: false,
-      message: `Failed to restore autosave snapshot: ${(error as Error).message}`,
+      message: toReadFailureMessage(
+        'Autosave snapshot file',
+        snapshotPath,
+        error,
+        'check file permissions or choose another snapshot.',
+      ),
     };
   }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content) as unknown;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return {
+        success: false,
+        message: toInvalidJsonMessage(
+          'Autosave snapshot',
+          snapshotPath,
+          'choose another snapshot or remove the corrupted file in cache/autosave.',
+        ),
+      };
+    }
+    return {
+      success: false,
+      message: `Failed to parse autosave snapshot: ${toErrorText(error)}. Next step: choose another snapshot and retry.`,
+    };
+  }
+
+  const migrated = migrateProjectToV2(parsed);
+  if (!validateProject(migrated)) {
+    return {
+      success: false,
+      message: toInvalidProjectStructureMessage(
+        'Autosave snapshot',
+        ajv.errorsText(validateProject.errors),
+        'choose another snapshot or open project.json manually and repair invalid fields.',
+      ),
+    };
+  }
+
+  const project: Project = migrated;
+  const saveResponse = await saveProjectToCurrentRoot(project);
+  if (!saveResponse.success) {
+    return {
+      success: false,
+      message: `${saveResponse.message} Next step: verify project write permissions and retry restore.`,
+    };
+  }
+
+  return {
+    success: true,
+    message: `Restored autosave snapshot ${trimmed}`,
+    project,
+  };
 }
 
 async function saveProjectToCurrentRoot(project: Project, reason: SaveProjectReason = 'manual'): Promise<ProjectResponse> {
@@ -876,6 +945,8 @@ async function ingestLocalFileAsProjectAsset(params: {
   sourcePath: string;
   type?: 'video' | 'image' | 'audio';
   originalName?: string;
+  tags?: string[];
+  notes?: string;
 }): Promise<AssetImportResponse> {
   if (!currentProjectRoot) {
     return { success: false, message: 'No ProjectRoot set. Create or load a project first.' };
@@ -944,8 +1015,8 @@ async function ingestLocalFileAsProjectAsset(params: {
     ...(durationSeconds ? { durationSeconds } : {}),
     thumbnailPath: relativeThumbnailPath,
     createdAt: new Date().toISOString(),
-    tags: [],
-    notes: '',
+    tags: Array.from(new Set((params.tags ?? []).map((tag) => tag.trim()).filter((tag) => tag.length > 0))),
+    notes: params.notes ?? '',
     status: 'idea',
   };
 
@@ -1000,11 +1071,28 @@ async function importComfyOutput(outputPath: string): Promise<AssetImportRespons
     return { success: false, message: `Invalid Comfy output path: ${outputPath}` };
   }
 
+  const duplicateTag = `comfy-output:${normalized.toLowerCase()}`;
+  try {
+    const project = await readCurrentProjectFromDisk();
+    const alreadyImported = project.assets.some((asset) => asset.tags.includes(duplicateTag));
+    if (alreadyImported) {
+      return {
+        success: false,
+        message: `Output already imported: "${normalized}". Next step: reuse existing asset in library/timeline instead of importing again.`,
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: `Comfy output import precheck failed: ${(error as Error).message}`,
+    };
+  }
+
   const inferredType = detectImportableAssetTypeFromExtension(parsed.base);
   if (!inferredType) {
     return {
       success: false,
-      message: `Unsupported Comfy output extension: ${path.extname(parsed.base) || '(none)'}`,
+      message: `Unsupported Comfy output extension: ${path.extname(parsed.base) || '(none)'}. Next step: import only image/video/audio outputs.`,
     };
   }
 
@@ -1012,7 +1100,7 @@ async function importComfyOutput(outputPath: string): Promise<AssetImportRespons
   if (!baseUrlResolution.ok) {
     return {
       success: false,
-      message: `Comfy output import blocked: ${baseUrlResolution.message}`,
+      message: `Comfy output import blocked: ${baseUrlResolution.message}. Next step: fix Comfy base URL policy and retry.`,
     };
   }
   const baseUrl = baseUrlResolution.baseUrl;
@@ -1030,14 +1118,14 @@ async function importComfyOutput(outputPath: string): Promise<AssetImportRespons
     if (!response.ok) {
       return {
         success: false,
-        message: `ComfyUI /view failed with HTTP ${response.status} for output "${normalized}".`,
+        message: `ComfyUI /view failed with HTTP ${response.status} for output "${normalized}". Next step: verify output path/subfolder and rerun the workflow if needed.`,
       };
     }
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     if (buffer.length === 0) {
-      return { success: false, message: `ComfyUI returned an empty file for "${normalized}".` };
+      return { success: false, message: `ComfyUI returned an empty file for "${normalized}". Next step: rerun workflow and retry import.` };
     }
 
     tempPath = resolveProjectPath(
@@ -1051,11 +1139,13 @@ async function importComfyOutput(outputPath: string): Promise<AssetImportRespons
       sourcePath: tempPath,
       type: inferredType,
       originalName: parsed.base,
+      tags: ['comfy-output', duplicateTag],
+      notes: `Imported from Comfy output path "${normalized}".`,
     });
   } catch (error) {
     return {
       success: false,
-      message: `Comfy output import failed: ${(error as Error).message}`,
+      message: `Comfy output import failed: ${(error as Error).message}. Next step: check ComfyUI /view availability and retry import.`,
     };
   } finally {
     if (tempPath) {
@@ -1362,23 +1452,57 @@ async function readCurrentProjectFromDisk(): Promise<Project> {
 async function loadProjectFromPath(
   projectPath: string,
   successMessagePrefix: string,
+  source: 'manual-load' | 'session-restore' = 'manual-load',
 ): Promise<ProjectResponse> {
   if (path.basename(projectPath) !== PROJECT_FILE_NAME) {
     return { success: false, message: 'Please select project.json.' };
   }
 
-  try {
-    const content = await fs.readFile(projectPath, 'utf-8');
-    const parsed = JSON.parse(content) as unknown;
-    const migrated = migrateProjectToV2(parsed);
+  const invalidJsonSubject = source === 'session-restore' ? 'Last session project file' : 'Selected project file';
+  const invalidProjectSubject = source === 'session-restore' ? 'Last session project' : 'Selected project';
+  const nextStep = source === 'session-restore'
+    ? 'load a different project manually and save it as the new session.'
+    : 'pick a valid project.json file and retry.';
 
-    if (!validateProject(migrated)) {
+  let content = '';
+  try {
+    content = await fs.readFile(projectPath, 'utf-8');
+  } catch (error) {
+    return {
+      success: false,
+      message: toReadFailureMessage(invalidJsonSubject, projectPath, error, nextStep),
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content) as unknown;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
       return {
         success: false,
-        message: `Loaded file is invalid: ${ajv.errorsText(validateProject.errors)}`,
+        message: toInvalidJsonMessage(invalidJsonSubject, projectPath, nextStep),
       };
     }
+    return {
+      success: false,
+      message: `Failed to parse project file: ${toErrorText(error)}. Next step: ${nextStep}`,
+    };
+  }
 
+  const migrated = migrateProjectToV2(parsed);
+  if (!validateProject(migrated)) {
+    return {
+      success: false,
+      message: toInvalidProjectStructureMessage(
+        invalidProjectSubject,
+        ajv.errorsText(validateProject.errors),
+        nextStep,
+      ),
+    };
+  }
+
+  try {
     const project: Project = migrated;
     const projectRoot = path.dirname(projectPath);
     currentProjectRoot = projectRoot;
@@ -1393,7 +1517,7 @@ async function loadProjectFromPath(
   } catch (error) {
     return {
       success: false,
-      message: `Failed to load project: ${(error as Error).message}`,
+      message: `Failed to finalize project load: ${toErrorText(error)}. Next step: check disk access and retry.`,
     };
   }
 }
@@ -1412,11 +1536,11 @@ async function restoreLastSessionProject(): Promise<ProjectResponse> {
   if (!existsSync(projectPath)) {
     return {
       success: false,
-      message: `Last session project not found: ${projectPath}`,
+      message: `Last session project not found: ${projectPath}. Next step: load a project manually and save once to refresh session recovery.`,
     };
   }
 
-  return loadProjectFromPath(projectPath, 'Restored last session from');
+  return loadProjectFromPath(projectPath, 'Restored last session from', 'session-restore');
 }
 
 function toJsonValue(value: unknown): JsonValue {

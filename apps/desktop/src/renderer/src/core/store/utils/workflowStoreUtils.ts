@@ -37,17 +37,54 @@ export function toProjectState(
     selectedWorkflowId: workflows[0]?.id ?? '',
     queuedWorkflowRuns: [],
     autoImportedOutputPathsByRunId: {},
+    trackAudioMutedById: {},
+    trackAudioSoloById: {},
     isDirty: false,
   };
 }
 
 export function applyComfyRunEventState(state: StudioState, event: ComfyRunEvent): Partial<StudioState> {
+  const parseTs = (value: string): number => {
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : 0;
+  };
+  const byNewestUpdate = (a: QueuedWorkflowRun, b: QueuedWorkflowRun): number => {
+    const updateDiff = parseTs(b.updatedAt) - parseTs(a.updatedAt);
+    if (updateDiff !== 0) {
+      return updateDiff;
+    }
+    const createDiff = parseTs(b.createdAt) - parseTs(a.createdAt);
+    if (createDiff !== 0) {
+      return createDiff;
+    }
+    return b.id.localeCompare(a.id);
+  };
+
   const existingIndex = state.queuedWorkflowRuns.findIndex((run) => run.id === event.runId);
-  const resolvedWorkflowName = state.workflows.find((workflow) => workflow.id === event.workflowId)?.name ?? event.workflowId;
+  const existingRun = existingIndex >= 0 ? state.queuedWorkflowRuns[existingIndex] : null;
+  const resolvedWorkflowId = event.workflowId === 'unknown' && existingRun ? existingRun.workflowId : event.workflowId;
+  const resolvedWorkflowName = state.workflows.find((workflow) => workflow.id === resolvedWorkflowId)?.name ?? resolvedWorkflowId;
   const nextComfyOnline = event.status === 'failed' ? state.comfyOnline : true;
 
   if (existingIndex === -1) {
+    const placeholderRun: QueuedWorkflowRun = {
+      id: event.runId,
+      workflowId: resolvedWorkflowId,
+      workflowName: resolvedWorkflowName,
+      createdAt: event.occurredAt,
+      updatedAt: event.occurredAt,
+      status: event.status,
+      promptId: event.promptId ?? null,
+      progress: event.progress,
+      message: event.message,
+      outputPaths: event.outputPaths,
+      request: null,
+    };
+
     return {
+      queuedWorkflowRuns: [placeholderRun, ...state.queuedWorkflowRuns]
+        .sort(byNewestUpdate)
+        .slice(0, 80),
       projectMessage: event.message,
       comfyOnline: nextComfyOnline,
       lastError: event.status === 'failed' ? event.message : state.lastError,
@@ -55,9 +92,19 @@ export function applyComfyRunEventState(state: StudioState, event: ComfyRunEvent
   }
 
   const existing = state.queuedWorkflowRuns[existingIndex];
+  const existingTs = parseTs(existing.updatedAt);
+  const incomingTs = parseTs(event.occurredAt);
+  if (incomingTs > 0 && existingTs > 0 && incomingTs < existingTs) {
+    return {
+      projectMessage: state.projectMessage,
+      comfyOnline: state.comfyOnline,
+      lastError: state.lastError,
+    };
+  }
+
   const updatedRun: QueuedWorkflowRun = {
     ...existing,
-    workflowId: event.workflowId,
+    workflowId: resolvedWorkflowId,
     workflowName: resolvedWorkflowName,
     status: event.status,
     promptId: event.promptId ?? existing.promptId,
@@ -69,9 +116,10 @@ export function applyComfyRunEventState(state: StudioState, event: ComfyRunEvent
 
   const nextRuns = [...state.queuedWorkflowRuns];
   nextRuns[existingIndex] = updatedRun;
+  nextRuns.sort(byNewestUpdate);
 
   return {
-    queuedWorkflowRuns: nextRuns,
+    queuedWorkflowRuns: nextRuns.slice(0, 80),
     projectMessage: event.message,
     comfyOnline: nextComfyOnline,
     lastError: event.status === 'failed' ? event.message : state.lastError,

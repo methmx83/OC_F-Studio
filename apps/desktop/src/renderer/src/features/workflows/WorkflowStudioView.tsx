@@ -41,10 +41,26 @@ type Draft = {
   inputs: Record<string, string>;
 };
 
+type WorkflowIssue = {
+  code: string;
+  message: string;
+  nextStep: string;
+};
+
 type Validation = {
   canSend: boolean;
   request: GenericComfyWorkflowRunRequest | null;
-  issues: string[];
+  issues: WorkflowIssue[];
+};
+
+type SendState = {
+  status: SendStatus;
+  message: string;
+  runId?: string;
+  promptId?: string;
+  hint?: string;
+  code?: string;
+  nextStep?: string;
 };
 
 type ImportAllSummary = {
@@ -98,7 +114,7 @@ export default function WorkflowStudioView() {
   const [wfId, setWfId] = useState("");
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [inputConnectionsByWorkflow, setInputConnectionsByWorkflow] = useState<Record<string, Record<string, boolean>>>({});
-  const [sendState, setSendState] = useState<{ status: SendStatus; message: string; runId?: string; promptId?: string; hint?: string }>({
+  const [sendState, setSendState] = useState<SendState>({
     status: "idle",
     message: "",
   });
@@ -111,7 +127,18 @@ export default function WorkflowStudioView() {
   const [copiedRenderedPayload, setCopiedRenderedPayload] = useState(false);
   const [showComfyPasteHint, setShowComfyPasteHint] = useState(false);
   const [importAllSummaries, setImportAllSummaries] = useState<Record<string, ImportAllSummary>>({});
-  const [runFilter, setRunFilter] = useState<RunFilter>("all");
+  const [manuallyImportedOutputPathsByRunId, setManuallyImportedOutputPathsByRunId] = useState<Record<string, string[]>>({});
+  const [runFilter, setRunFilter] = useState<RunFilter>(() => {
+    try {
+      const raw = window.sessionStorage.getItem("workflowStudio.recentRuns.filter");
+      if (raw === "queued" || raw === "failed" || raw === "success") {
+        return raw;
+      }
+      return "all";
+    } catch {
+      return "all";
+    }
+  });
   const [runSort, setRunSort] = useState<RunSort>(() => {
     try {
       const raw = window.sessionStorage.getItem("workflowStudio.recentRuns.sort");
@@ -133,6 +160,71 @@ export default function WorkflowStudioView() {
   const [nowTs, setNowTs] = useState(() => Date.now());
   const [autoPlaceImportedOutputs, setAutoPlaceImportedOutputs] = useState(true);
   const skipNextPresetPersistRef = useRef(false);
+
+  const setWorkflowErrorState = (rawMessage: string, fallbackCode: string, context?: { runId?: string; promptId?: string }) => {
+    const issue = resolveWorkflowIssue(rawMessage, fallbackCode);
+    setSendState({
+      status: "error",
+      message: issue.message,
+      code: issue.code,
+      nextStep: issue.nextStep,
+      hint: issue.nextStep,
+      runId: context?.runId,
+      promptId: context?.promptId,
+    });
+  };
+
+  const rememberQueuedRunRequest = (
+    runId: string,
+    workflowId: string,
+    workflowName: string,
+    request: ComfyWorkflowRunRequest,
+  ) => {
+    useStudioStore.setState((state) => {
+      const now = new Date().toISOString();
+      const existing = state.queuedWorkflowRuns.find((run) => run.id === runId);
+      const nextRun = {
+        id: runId,
+        workflowId,
+        workflowName,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        status: existing?.status ?? "pending",
+        promptId: existing?.promptId ?? null,
+        progress: existing?.progress ?? 0,
+        message: existing?.message ?? `Queueing workflow "${workflowName}"...`,
+        outputPaths: existing?.outputPaths ?? [],
+        request,
+      } as const;
+
+      const withoutCurrent = state.queuedWorkflowRuns.filter((run) => run.id !== runId);
+      const nextRuns = [nextRun, ...withoutCurrent].sort(compareRunsByNewest).slice(0, 80);
+      return { queuedWorkflowRuns: nextRuns };
+    });
+  };
+
+  const rememberManualImportedOutputPath = (runId: string, outputPath: string) => {
+    setManuallyImportedOutputPathsByRunId((prev) => {
+      const existing = prev[runId] ?? [];
+      if (existing.includes(outputPath)) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [runId]: [...existing, outputPath],
+      };
+    });
+  };
+
+  const isOutputAlreadyImported = (runId: string, outputPath: string): boolean => {
+    const autoImported = autoImportedOutputPathsByRunId[runId] ?? [];
+    if (autoImported.includes(outputPath)) {
+      return true;
+    }
+
+    const manuallyImported = manuallyImportedOutputPathsByRunId[runId] ?? [];
+    return manuallyImported.includes(outputPath);
+  };
 
   useEffect(() => {
     void loadCatalog();
@@ -308,6 +400,13 @@ export default function WorkflowStudioView() {
       // ignore session storage errors
     }
   }, [runSort]);
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem("workflowStudio.recentRuns.filter", runFilter);
+    } catch {
+      // ignore session storage errors
+    }
+  }, [runFilter]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -325,10 +424,34 @@ export default function WorkflowStudioView() {
     () => (selected && draft ? validate(selected, draft, assets, inputConnections ?? undefined) : null),
     [selected, draft, assets, inputConnections],
   );
-  const selectedWorkflowRuns = useMemo(
-    () => (selected ? queuedWorkflowRuns.filter((run) => run.workflowId === selected.id).slice(0, 24) : []),
-    [queuedWorkflowRuns, selected],
-  );
+  const selectedWorkflowRuns = useMemo(() => {
+    if (!selected) {
+      return [];
+    }
+
+    const dedupedByRunId = new Map<string, (typeof queuedWorkflowRuns)[number]>();
+    queuedWorkflowRuns.forEach((run) => {
+      if (run.workflowId !== selected.id) {
+        return;
+      }
+
+      const existing = dedupedByRunId.get(run.id);
+      if (!existing) {
+        dedupedByRunId.set(run.id, run);
+        return;
+      }
+
+      const existingTs = Number.isFinite(new Date(existing.updatedAt).getTime()) ? new Date(existing.updatedAt).getTime() : 0;
+      const incomingTs = Number.isFinite(new Date(run.updatedAt).getTime()) ? new Date(run.updatedAt).getTime() : 0;
+      if (incomingTs >= existingTs) {
+        dedupedByRunId.set(run.id, run);
+      }
+    });
+
+    const runs = Array.from(dedupedByRunId.values());
+    runs.sort((a, b) => compareRunsByNewest(a, b));
+    return runs.slice(0, 24);
+  }, [queuedWorkflowRuns, selected]);
   const filteredWorkflowRuns = useMemo(() => {
     if (runFilter === "all") return selectedWorkflowRuns;
     if (runFilter === "queued") {
@@ -339,11 +462,10 @@ export default function WorkflowStudioView() {
   const sortedFilteredWorkflowRuns = useMemo(() => {
     const list = [...filteredWorkflowRuns];
     list.sort((a, b) => {
-      const aTs = new Date(a.createdAt).getTime();
-      const bTs = new Date(b.createdAt).getTime();
-      const safeA = Number.isFinite(aTs) ? aTs : 0;
-      const safeB = Number.isFinite(bTs) ? bTs : 0;
-      return runSort === "newest" ? safeB - safeA : safeA - safeB;
+      if (runSort === "newest") {
+        return compareRunsByNewest(a, b);
+      }
+      return compareRunsByOldest(a, b);
     });
     return list;
   }, [filteredWorkflowRuns, runSort]);
@@ -456,25 +578,64 @@ export default function WorkflowStudioView() {
   }
 
   async function onSend(): Promise<void> {
-    if (!selected || !validation?.request) return;
+    if (!selected) {
+      setWorkflowErrorState("No workflow selected.", "WF_SEND_NO_WORKFLOW");
+      return;
+    }
+    if (!validation?.canSend || !validation.request) {
+      const firstIssue = validation?.issues[0] ?? null;
+      if (firstIssue) {
+        setSendState({
+          status: "error",
+          message: firstIssue.message,
+          code: firstIssue.code,
+          nextStep: firstIssue.nextStep,
+          hint: firstIssue.nextStep,
+        });
+      } else {
+        setWorkflowErrorState("Workflow validation failed before send.", "WF_SEND_VALIDATION");
+      }
+      return;
+    }
+
     const runId = makeRunId();
+    rememberQueuedRunRequest(runId, validation.request.workflowId, selected.name, validation.request);
     setSendState({ status: "sending", message: `Queueing "${selected.name}"...`, runId });
     try {
+      const preflight = await getIpcClient().previewComfyRunPayload({
+        request: validation.request,
+        baseUrlOverride: comfyBaseUrl.trim().length > 0 ? comfyBaseUrl.trim() : undefined,
+      });
+      if (!preflight.success) {
+        setWorkflowErrorState(preflight.message || "Workflow payload preflight failed.", "WF_SEND_PREFLIGHT_FAILED", { runId });
+        return;
+      }
+
       const res = await getIpcClient().queueComfyRun({
         runId,
         request: validation.request,
         baseUrlOverride: comfyBaseUrl.trim().length > 0 ? comfyBaseUrl.trim() : undefined,
       });
-      const hint = res.success ? undefined : resolveComfyActionHint(res.message);
-      setSendState({ status: res.success ? "success" : "error", message: res.message, runId: res.runId, promptId: res.promptId, hint });
+      if (!res.success) {
+        setWorkflowErrorState(res.message, "WF_SEND_QUEUE_FAILED", { runId: res.runId, promptId: res.promptId });
+        return;
+      }
+
+      setSendState({
+        status: "success",
+        message: res.message,
+        runId: res.runId,
+        promptId: res.promptId,
+      });
     } catch (e) {
       const message = `Workflow queue request failed: ${e instanceof Error ? e.message : String(e)}`;
-      setSendState({ status: "error", message, runId, hint: resolveComfyActionHint(message) });
+      setWorkflowErrorState(message, "WF_SEND_QUEUE_EXCEPTION", { runId });
     }
   }
 
   async function buildRenderedPayloadJson(): Promise<string | null> {
     if (!validation?.request) {
+      setWorkflowErrorState("Cannot render payload because workflow validation failed.", "WF_SEND_VALIDATION");
       return null;
     }
 
@@ -484,11 +645,7 @@ export default function WorkflowStudioView() {
     });
 
     if (!response.success || !response.renderedPrompt) {
-      setSendState({
-        status: "error",
-        message: response.message || "Rendern des Workflow-Payloads fehlgeschlagen.",
-        hint: resolveComfyActionHint(response.message || ""),
-      });
+      setWorkflowErrorState(response.message || "Rendern des Workflow-Payloads fehlgeschlagen.", "WF_SEND_PAYLOAD_PREVIEW_FAILED");
       return null;
     }
 
@@ -511,10 +668,7 @@ export default function WorkflowStudioView() {
       setCopiedRenderedPayload(true);
       window.setTimeout(() => setCopiedRenderedPayload(false), 1500);
     } catch (error) {
-      setSendState({
-        status: "error",
-        message: `Copy rendered payload failed: ${error instanceof Error ? error.message : String(error)}`,
-      });
+      setWorkflowErrorState(`Copy rendered payload failed: ${error instanceof Error ? error.message : String(error)}`, "WF_UI_CLIPBOARD_FAILED");
     }
   }
 
@@ -609,21 +763,49 @@ export default function WorkflowStudioView() {
     }
   }
 
-  async function onImportOutput(outputPath: string): Promise<void> {
-    if (!canImportOutputPath(outputPath)) return;
-    setImportingOutputPath(outputPath);
+  async function onImportOutput(runId: string, outputPath: string): Promise<void> {
+    const normalizedPath = outputPath.trim();
+    if (!canImportOutputPath(normalizedPath)) {
+      setWorkflowErrorState(`Unsupported output file type: ${normalizedPath}`, "WF_OUTPUT_UNSUPPORTED_EXTENSION", { runId });
+      return;
+    }
+    if (isOutputAlreadyImported(runId, normalizedPath)) {
+      setWorkflowErrorState(`Output already imported in this session: ${normalizedPath}`, "WF_OUTPUT_DUPLICATE", { runId });
+      return;
+    }
+
+    setImportingOutputPath(normalizedPath);
     try {
       const beforeState = useStudioStore.getState();
       const beforeAssetIds = new Set(beforeState.assets.map((asset) => asset.id));
-      await importComfyOutputAsset(outputPath);
+      await importComfyOutputAsset(normalizedPath);
       const afterState = useStudioStore.getState();
       const importedAssets = afterState.assets.filter((asset) => !beforeAssetIds.has(asset.id));
 
+      if (importedAssets.length === 0) {
+        const importIssue = resolveOutputImportIssue(afterState.lastError ?? afterState.projectMessage ?? "", normalizedPath);
+        setSendState({
+          status: "error",
+          message: importIssue.message,
+          code: importIssue.code,
+          nextStep: importIssue.nextStep,
+          hint: importIssue.nextStep,
+          runId,
+        });
+        return;
+      }
+
+      rememberManualImportedOutputPath(runId, normalizedPath);
       if (autoPlaceImportedOutputs) {
         importedAssets.forEach((asset) => {
           dropAssetToTimeline(asset.id);
         });
       }
+      setSendState({
+        status: "success",
+        message: `Output importiert: ${normalizedPath}`,
+        runId,
+      });
     } finally {
       setImportingOutputPath(null);
     }
@@ -635,7 +817,8 @@ export default function WorkflowStudioView() {
     const uniquePaths = Array.from(new Set(run.outputPaths.map((path) => path.trim()).filter(Boolean)));
     const importablePaths = uniquePaths.filter((path) => canImportOutputPath(path));
     const unsupportedPaths = uniquePaths.filter((path) => !canImportOutputPath(path));
-    const skippedUnsupported = unsupportedPaths.length;
+    const duplicatePaths = importablePaths.filter((path) => isOutputAlreadyImported(run.id, path));
+    const importCandidates = importablePaths.filter((path) => !duplicatePaths.includes(path));
 
     const reasonCounts: Record<string, number> = {};
     const skippedExamples: string[] = [];
@@ -646,15 +829,19 @@ export default function WorkflowStudioView() {
       }
     };
 
-    unsupportedPaths.forEach((path) => addReason("UNSUPPORTED_EXTENSION", path));
+    unsupportedPaths.forEach((path) => addReason("WF_OUTPUT_UNSUPPORTED_EXTENSION", path));
+    duplicatePaths.forEach((path) => addReason("DUPLICATE_OUTPUT", path));
 
-    if (importablePaths.length === 0) {
+    if (importCandidates.length === 0) {
+      const reasonText = Object.entries(reasonCounts)
+        .map(([reason, count]) => `${formatImportReasonLabel(reason)}: ${count}`)
+        .join(" | ");
       const summary: ImportAllSummary = {
         imported: 0,
-        skipped: skippedUnsupported,
+        skipped: uniquePaths.length,
         reasonCounts,
         skippedExamples,
-        message: "0 importiert, alle Outputs uebersprungen (keine unterstuetzten Dateitypen).",
+        message: `0 importiert, alle Outputs uebersprungen${reasonText ? ` (${reasonText})` : ""}.`,
       };
       setImportAllSummaries((prev) => ({ ...prev, [run.id]: summary }));
       return;
@@ -663,8 +850,9 @@ export default function WorkflowStudioView() {
     setImportingRunId(run.id);
     try {
       let imported = 0;
+      let latestImportIssue: WorkflowIssue | null = null;
 
-      for (const outputPath of importablePaths) {
+      for (const outputPath of importCandidates) {
         const beforeState = useStudioStore.getState();
         const beforeAssetIds = new Set(beforeState.assets.map((asset) => asset.id));
         try {
@@ -674,16 +862,22 @@ export default function WorkflowStudioView() {
 
           if (importedAssets.length > 0) {
             imported += 1;
+            rememberManualImportedOutputPath(run.id, outputPath);
             if (autoPlaceImportedOutputs) {
               importedAssets.forEach((asset) => {
                 dropAssetToTimeline(asset.id);
               });
             }
           } else {
-            addReason("NO_CHANGE_OR_REJECTED", outputPath);
+            latestImportIssue = resolveOutputImportIssue(afterState.lastError ?? afterState.projectMessage ?? "", outputPath);
+            addReason(latestImportIssue.code, outputPath);
           }
-        } catch {
-          addReason("IMPORT_EXCEPTION", outputPath);
+        } catch (error) {
+          latestImportIssue = resolveWorkflowIssue(
+            `Output import exception for "${outputPath}": ${error instanceof Error ? error.message : String(error)}`,
+            "WF_OUTPUT_IMPORT_EXCEPTION",
+          );
+          addReason(latestImportIssue.code, outputPath);
         }
       }
 
@@ -699,30 +893,51 @@ export default function WorkflowStudioView() {
         message: `${imported} importiert, ${skipped} uebersprungen${reasonText ? ` (${reasonText})` : ""}.`,
       };
       setImportAllSummaries((prev) => ({ ...prev, [run.id]: summary }));
+
+      if (imported === 0 && latestImportIssue) {
+        setSendState({
+          status: "error",
+          message: latestImportIssue.message,
+          code: latestImportIssue.code,
+          nextStep: latestImportIssue.nextStep,
+          hint: latestImportIssue.nextStep,
+          runId: run.id,
+        });
+      }
     } finally {
       setImportingRunId(null);
     }
   }
 
-  async function onRetryRun(run: { id: string; workflowName: string; request: ComfyWorkflowRunRequest }): Promise<void> {
+  async function onRetryRun(run: { id: string; workflowName: string; request: ComfyWorkflowRunRequest | null }): Promise<void> {
+    if (!run.request) {
+      setWorkflowErrorState(
+        `Retry blockiert: Fuer Run "${run.id}" ist kein Request-Payload gespeichert.`,
+        "WF_RUN_RETRY_MISSING_REQUEST",
+        { runId: run.id },
+      );
+      return;
+    }
+
     const duplicateActiveRun = queuedWorkflowRuns.find((candidate) => {
       if (candidate.id === run.id) return false;
       if (candidate.status !== "pending" && candidate.status !== "running") return false;
+      if (!candidate.request) return false;
       return JSON.stringify(candidate.request) === JSON.stringify(run.request);
     });
 
     if (duplicateActiveRun) {
-      setSendState({
-        status: "error",
-        message: `Retry blockiert: Fuer diesen Request laeuft bereits ein aktiver Run (${duplicateActiveRun.id}).`,
-        runId: duplicateActiveRun.id,
-        hint: "Warte auf Abschluss oder pruefe den aktiven Run in Recent Runs.",
-      });
+      setWorkflowErrorState(
+        `Retry blockiert: Fuer diesen Request laeuft bereits ein aktiver Run (${duplicateActiveRun.id}).`,
+        "WF_RUN_RETRY_DUPLICATE_ACTIVE",
+        { runId: duplicateActiveRun.id },
+      );
       return;
     }
 
     const retryRunId = makeRunId();
     setRetryingRunId(run.id);
+    rememberQueuedRunRequest(retryRunId, run.request.workflowId, run.workflowName, run.request);
     setSendState({ status: "sending", message: `Retrying "${run.workflowName}"...`, runId: retryRunId });
     try {
       const res = await getIpcClient().queueComfyRun({
@@ -730,11 +945,14 @@ export default function WorkflowStudioView() {
         request: run.request,
         baseUrlOverride: comfyBaseUrl.trim().length > 0 ? comfyBaseUrl.trim() : undefined,
       });
-      const hint = res.success ? undefined : resolveComfyActionHint(res.message);
-      setSendState({ status: res.success ? "success" : "error", message: res.message, runId: res.runId, promptId: res.promptId, hint });
+      if (!res.success) {
+        setWorkflowErrorState(res.message, "WF_RUN_RETRY_FAILED", { runId: res.runId, promptId: res.promptId });
+        return;
+      }
+      setSendState({ status: "success", message: res.message, runId: res.runId, promptId: res.promptId });
     } catch (e) {
       const message = `Retry request failed: ${e instanceof Error ? e.message : String(e)}`;
-      setSendState({ status: "error", message, runId: retryRunId, hint: resolveComfyActionHint(message) });
+      setWorkflowErrorState(message, "WF_RUN_RETRY_EXCEPTION", { runId: retryRunId });
     } finally {
       setRetryingRunId(null);
     }
@@ -748,21 +966,25 @@ export default function WorkflowStudioView() {
         promptId: run.promptId ?? undefined,
         baseUrlOverride: comfyBaseUrl.trim().length > 0 ? comfyBaseUrl.trim() : undefined,
       });
-      setSendState({
-        status: response.success ? "success" : "error",
-        message: response.message,
-        runId: response.runId,
-        hint: response.success ? undefined : resolveComfyActionHint(response.message),
-      });
+      if (!response.success) {
+        setWorkflowErrorState(response.message, "WF_RUN_CANCEL_FAILED", { runId: response.runId });
+        return;
+      }
+      setSendState({ status: "success", message: response.message, runId: response.runId });
     } catch (e) {
       const message = `Cancel request failed: ${e instanceof Error ? e.message : String(e)}`;
-      setSendState({ status: "error", message, runId: run.id, hint: resolveComfyActionHint(message) });
+      setWorkflowErrorState(message, "WF_RUN_CANCEL_EXCEPTION", { runId: run.id });
     } finally {
       setCancellingRunId(null);
     }
   }
 
-  async function onCopyPromptPayload(run: { id: string; request: ComfyWorkflowRunRequest }): Promise<void> {
+  async function onCopyPromptPayload(run: { id: string; request: ComfyWorkflowRunRequest | null }): Promise<void> {
+    if (!run.request) {
+      setWorkflowErrorState(`Copy prompt payload not available for run "${run.id}".`, "WF_RUN_COPY_MISSING_REQUEST", { runId: run.id });
+      return;
+    }
+
     const payload = JSON.stringify(run.request, null, 2);
     try {
       if (typeof navigator?.clipboard?.writeText === "function") {
@@ -775,7 +997,7 @@ export default function WorkflowStudioView() {
         setCopiedRunId((current) => (current === run.id ? null : current));
       }, 1500);
     } catch (e) {
-      setSendState({ status: "error", message: `Copy prompt payload failed: ${e instanceof Error ? e.message : String(e)}` });
+      setWorkflowErrorState(`Copy prompt payload failed: ${e instanceof Error ? e.message : String(e)}`, "WF_UI_CLIPBOARD_FAILED", { runId: run.id });
     }
   }
 
@@ -787,7 +1009,7 @@ export default function WorkflowStudioView() {
       setCopiedAuthoringHint("tokens");
       window.setTimeout(() => setCopiedAuthoringHint((current) => (current === "tokens" ? null : current)), 1500);
     } catch (e) {
-      setSendState({ status: "error", message: `Copy template tokens failed: ${e instanceof Error ? e.message : String(e)}` });
+      setWorkflowErrorState(`Copy template tokens failed: ${e instanceof Error ? e.message : String(e)}`, "WF_UI_CLIPBOARD_FAILED");
     }
   }
 
@@ -804,7 +1026,7 @@ export default function WorkflowStudioView() {
       setCopiedAuthoringHint("inputs");
       window.setTimeout(() => setCopiedAuthoringHint((current) => (current === "inputs" ? null : current)), 1500);
     } catch (e) {
-      setSendState({ status: "error", message: `Copy meta input stubs failed: ${e instanceof Error ? e.message : String(e)}` });
+      setWorkflowErrorState(`Copy meta input stubs failed: ${e instanceof Error ? e.message : String(e)}`, "WF_UI_CLIPBOARD_FAILED");
     }
   }
 
@@ -1009,7 +1231,7 @@ export default function WorkflowStudioView() {
                     draft={draft}
                     assets={assets}
                     connections={inputConnections ?? {}}
-                    validationIssues={validation.issues}
+                    validationIssues={validation.issues.map((issue) => `${issue.code}: ${issue.message}`)}
                     canSend={validation.canSend}
                     onNumChange={onNum}
                     onInputChange={onInput}
@@ -1063,12 +1285,24 @@ export default function WorkflowStudioView() {
                 {(validation.issues.length > 0 || sendState.status !== "idle") && (
                   <div className="rounded-2xl border border-white/5 bg-zinc-950/30 p-4 text-[10px]">
                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Validation / Send Status</div>
-                    {validation.issues.length > 0 && <div className="mt-3 space-y-1">{validation.issues.map((msg) => <div key={msg} className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-amber-200">{msg}</div>)}</div>}
+                    {validation.issues.length > 0 && (
+                      <div className="mt-3 space-y-1">
+                        {validation.issues.map((issue) => (
+                          <div key={`${issue.code}:${issue.message}`} className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-2 text-amber-200">
+                            <div className="text-[9px] font-black uppercase tracking-wider">{issue.code}</div>
+                            <div className="mt-1">{issue.message}</div>
+                            <div className="mt-1 text-amber-100/80">Next Step: {issue.nextStep}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {sendState.status !== "idle" && (
                       <div className={`mt-3 rounded-xl border px-3 py-3 ${sendState.status === "success" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200" : sendState.status === "error" ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-blue-500/20 bg-blue-500/10 text-blue-200"}`}>
                         <div className="font-bold uppercase tracking-wider text-[9px]">{sendState.status === "success" ? "Queued" : sendState.status === "error" ? "Send Failed" : "Submitting"}</div>
                         <div className="mt-1">{sendState.message}</div>
-                        {sendState.hint && <div className="mt-2 rounded-md border border-current/20 bg-black/20 px-2 py-1 text-[10px]">Hint: {sendState.hint}</div>}
+                        {sendState.code && <div className="mt-2 text-[9px] font-black uppercase tracking-wider">Code: {sendState.code}</div>}
+                        {sendState.nextStep && <div className="mt-2 rounded-md border border-current/20 bg-black/20 px-2 py-1 text-[10px]">Next Step: {sendState.nextStep}</div>}
+                        {!sendState.nextStep && sendState.hint && <div className="mt-2 rounded-md border border-current/20 bg-black/20 px-2 py-1 text-[10px]">Hint: {sendState.hint}</div>}
                         {sendState.runId && <div className="mt-2 text-[9px] font-mono text-current/80">runId: {sendState.runId}</div>}
                         {sendState.promptId && <div className="mt-1 text-[9px] font-mono text-current/80">promptId: {sendState.promptId}</div>}
                       </div>
@@ -1198,16 +1432,23 @@ export default function WorkflowStudioView() {
                       {sortedFilteredWorkflowRuns.map((run) => {
                         const autoImportedPaths = autoImportedOutputPathsByRunId[run.id] ?? [];
                         const autoImportedSet = new Set(autoImportedPaths);
+                        const manuallyImportedPaths = manuallyImportedOutputPathsByRunId[run.id] ?? [];
+                        const manuallyImportedSet = new Set(manuallyImportedPaths);
+                        const isAlreadyImportedPath = (outputPath: string) => autoImportedSet.has(outputPath) || manuallyImportedSet.has(outputPath);
                         const importableOutputCount = run.outputPaths.filter((path) => canImportOutputPath(path)).length;
                         const autoImportedOutputCount = run.outputPaths.filter((path) => autoImportedSet.has(path)).length;
+                        const totalKnownImportedOutputCount = run.outputPaths.filter((path) => isAlreadyImportedPath(path)).length;
+                        const runFailureIssue = run.status === "failed" ? resolveWorkflowIssue(run.message, "WF_RUN_FAILED") : null;
 
                         return (
                         <div key={run.id} className="rounded-xl border border-white/5 bg-zinc-900/40 p-3">
                           <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <div className="font-bold text-zinc-200 truncate">{run.message}</div>
-                              {run.status === "failed" && resolveComfyActionHint(run.message) && (
-                                <div className="mt-1 text-[9px] text-amber-300/90 truncate">Hint: {resolveComfyActionHint(run.message)}</div>
+                              {runFailureIssue && (
+                                <div className="mt-1 text-[9px] text-amber-300/90">
+                                  {runFailureIssue.code} - Next Step: {runFailureIssue.nextStep}
+                                </div>
                               )}
                               <div className="mt-1 text-[9px] font-mono text-zinc-500 truncate">{run.id}</div>
                             </div>
@@ -1261,8 +1502,9 @@ export default function WorkflowStudioView() {
                               onClick={() => {
                                 void onCopyPromptPayload(run);
                               }}
-                              className="px-2 py-1 rounded-md border border-white/10 bg-zinc-950/60 text-zinc-300 text-[8px] font-black uppercase tracking-wider hover:border-zinc-700 hover:text-white"
-                              title="Copy prompt payload JSON"
+                              disabled={!run.request}
+                              className="px-2 py-1 rounded-md border border-white/10 bg-zinc-950/60 text-zinc-300 text-[8px] font-black uppercase tracking-wider hover:border-zinc-700 hover:text-white disabled:opacity-40"
+                              title={run.request ? "Copy prompt payload JSON" : "No stored request payload for this run"}
                             >
                               <span className="inline-flex items-center gap-1"><Copy size={10} /> {copiedRunId === run.id ? "Copied" : "Copy prompt payload"}</span>
                             </button>
@@ -1271,9 +1513,9 @@ export default function WorkflowStudioView() {
                               onClick={() => {
                                 void onRetryRun(run);
                               }}
-                              disabled={run.status !== "failed" || retryingRunId === run.id || isProjectBusy}
+                              disabled={run.status !== "failed" || !run.request || retryingRunId === run.id || isProjectBusy}
                               className="px-2 py-1 rounded-md border border-amber-400/20 bg-amber-400/10 text-amber-200 text-[8px] font-black uppercase tracking-wider disabled:opacity-40"
-                              title={run.status === "failed" ? "Retry this failed run" : "Retry available for failed runs"}
+                              title={run.status === "failed" ? (run.request ? "Retry this failed run" : "Retry unavailable: missing stored request payload") : "Retry available for failed runs"}
                             >
                               <span className="inline-flex items-center gap-1"><RotateCcw size={10} /> {retryingRunId === run.id ? "Retrying..." : "Retry failed run"}</span>
                             </button>
@@ -1298,8 +1540,8 @@ export default function WorkflowStudioView() {
                                     Outputs ({run.outputPaths.length})
                                   </div>
                                   {importableOutputCount > 0 && (
-                                    <div className={`mt-1 text-[8px] uppercase tracking-wider font-bold ${autoImportedOutputCount >= importableOutputCount ? "text-emerald-300" : "text-blue-300"}`}>
-                                      Auto-imported {autoImportedOutputCount}/{importableOutputCount}
+                                    <div className={`mt-1 text-[8px] uppercase tracking-wider font-bold ${totalKnownImportedOutputCount >= importableOutputCount ? "text-emerald-300" : "text-blue-300"}`}>
+                                      Imported {totalKnownImportedOutputCount}/{importableOutputCount} (Auto {autoImportedOutputCount})
                                     </div>
                                   )}
                                 </div>
@@ -1307,7 +1549,7 @@ export default function WorkflowStudioView() {
                                   onClick={() => {
                                     void onImportAllOutputs(run);
                                   }}
-                                  disabled={isProjectBusy || importingRunId === run.id || run.outputPaths.every((path) => !canImportOutputPath(path))}
+                                  disabled={isProjectBusy || importingRunId === run.id || run.outputPaths.every((path) => !canImportOutputPath(path) || isAlreadyImportedPath(path))}
                                   className="shrink-0 px-2 py-1 rounded-md border border-emerald-400/20 bg-emerald-400/10 text-emerald-200 text-[8px] font-black uppercase tracking-wider disabled:opacity-40"
                                   title="Import all supported outputs into project assets"
                                 >
@@ -1325,15 +1567,22 @@ export default function WorkflowStudioView() {
                                         Auto
                                       </span>
                                     )}
+                                    {manuallyImportedSet.has(outputPath) && !autoImportedSet.has(outputPath) && (
+                                      <span className="shrink-0 px-1.5 py-0.5 rounded-md border border-blue-400/30 bg-blue-500/10 text-blue-200 text-[8px] font-black uppercase tracking-wider">
+                                        Imported
+                                      </span>
+                                    )}
                                     <button
                                       onClick={() => {
-                                        void onImportOutput(outputPath);
+                                        void onImportOutput(run.id, outputPath);
                                       }}
-                                      disabled={!canImportOutputPath(outputPath) || isProjectBusy}
+                                      disabled={!canImportOutputPath(outputPath) || isAlreadyImportedPath(outputPath) || isProjectBusy}
                                       className="shrink-0 px-2 py-1 rounded-md border border-emerald-400/20 bg-emerald-400/10 text-emerald-200 text-[8px] font-black uppercase tracking-wider disabled:opacity-40"
                                       title={
-                                        canImportOutputPath(outputPath)
+                                        canImportOutputPath(outputPath) && !isAlreadyImportedPath(outputPath)
                                           ? "Import output into project assets"
+                                          : isAlreadyImportedPath(outputPath)
+                                            ? "Output already imported in this session"
                                           : "Unsupported output file type"
                                       }
                                     >
@@ -1374,38 +1623,118 @@ export default function WorkflowStudioView() {
   );
 }
 
-function resolveComfyActionHint(message: string): string | undefined {
+const WORKFLOW_ISSUE_NEXT_STEP_BY_CODE: Record<string, string> = {
+  WF_SEND_NO_WORKFLOW: "Workflow im linken Katalog auswaehlen und erneut senden.",
+  WF_SEND_VALIDATION: "Validierungsfehler im Bereich 'Validation / Send Status' beheben.",
+  WF_SEND_PARAM_INVALID: "Numerische Parameter auf gueltige Werte (>= 1) setzen.",
+  WF_SEND_INPUT_KEY_INVALID: "Meta-Input-Key auf ...AssetId konventionieren.",
+  WF_SEND_INPUT_MISSING: "Pflicht-Input aus der Asset-Library zuweisen.",
+  WF_SEND_INPUT_ASSET_MISSING: "Input neu zuweisen; referenziertes Asset ist nicht mehr im Projekt.",
+  WF_SEND_INPUT_TYPE_MISMATCH: "Fuer den Input ein Asset mit passendem Typ (image/video/audio) auswaehlen.",
+  WF_SEND_TEMPLATE_MISSING: "API-Template unter workflows/<workflowId>.api.json anlegen oder korrigieren.",
+  WF_SEND_PLACEHOLDER_UNRESOLVED: "meta.inputs[].key und {{...}} Platzhalter im API-JSON synchronisieren.",
+  WF_SEND_PREFLIGHT_FAILED: "Payload-Preview reparieren und danach erneut senden.",
+  WF_SEND_QUEUE_FAILED: "Comfy-Status/URL pruefen und den Run erneut starten.",
+  WF_SEND_QUEUE_EXCEPTION: "ComfyUI-Erreichbarkeit und lokale Netzwerk-/Firewall-Regeln pruefen.",
+  WF_SEND_PAYLOAD_PREVIEW_FAILED: "Template-JSON und Input-Mapping pruefen.",
+  WF_RUN_RETRY_MISSING_REQUEST: "Neuen Run direkt aus dem Workflow-Form starten (historischer Request fehlt).",
+  WF_RUN_RETRY_DUPLICATE_ACTIVE: "Auf Abschluss des aktiven Runs warten oder zuerst abbrechen.",
+  WF_RUN_RETRY_FAILED: "ComfyUI-Status pruefen und Retry erneut ausloesen.",
+  WF_RUN_RETRY_EXCEPTION: "ComfyUI-Verbindung pruefen und Retry erneut ausloesen.",
+  WF_RUN_CANCEL_FAILED: "Prompt-ID/Run-Status pruefen und erneut abbrechen.",
+  WF_RUN_CANCEL_EXCEPTION: "ComfyUI-Verbindung pruefen und erneut abbrechen.",
+  WF_RUN_COPY_MISSING_REQUEST: "Nur Runs mit gespeichertem Request koennen kopiert werden.",
+  WF_UI_CLIPBOARD_FAILED: "Browser-Clipboard-Berechtigung pruefen und erneut versuchen.",
+  WF_OUTPUT_UNSUPPORTED_EXTENSION: "Nur unterstuetzte Output-Typen importieren (Image/Video/Audio).",
+  WF_OUTPUT_DUPLICATE: "Bereits importierten Output nicht erneut importieren; stattdessen vorhandenes Asset nutzen.",
+  WF_OUTPUT_VIEW_HTTP_ERROR: "Comfy /view Rueckgabe pruefen (Dateiname/Subfolder) und Run-Ausgabe erneut erzeugen.",
+  WF_OUTPUT_VIEW_FETCH_ERROR: "ComfyUI-Verbindung pruefen und Import wiederholen.",
+  WF_OUTPUT_EMPTY_FILE: "Run erneut ausfuehren; Comfy lieferte eine leere Datei.",
+  WF_OUTPUT_IMPORT_FAILED: "Fehlermeldung pruefen und den betroffenen Output einzeln erneut importieren.",
+  WF_OUTPUT_NO_RESULT: "Import erneut versuchen oder Output-Datei in Comfy pruefen.",
+  WF_OUTPUT_IMPORT_EXCEPTION: "Import erneut versuchen; bei Wiederholung Comfy-/Dateizugriff pruefen.",
+  WF_RUN_FAILED: "Fehlerdetails pruefen, Input/Template korrigieren und Run erneut starten.",
+  WF_PROJECT_NOT_LOADED: "Projekt laden oder neu erstellen und danach erneut ausfuehren.",
+  WF_COMFY_UNREACHABLE: "ComfyUI starten und URL/Port pruefen.",
+  WF_COMFY_REMOTE_BLOCKED: "Nur lokale Hosts sind erlaubt; optional COMFYUI_ALLOW_REMOTE=1 setzen.",
+  WF_COMFY_PROMPT_REJECTED: "Workflow/API-JSON gegen Comfy Export pruefen.",
+};
+
+function detectWorkflowIssueCode(message: string, fallbackCode: string): string {
   const m = message.toLowerCase();
+  if (m.includes("no workflow selected")) return "WF_SEND_NO_WORKFLOW";
+  if (m.includes("required input") || m.includes("pflicht-input")) return "WF_SEND_INPUT_MISSING";
+  if (m.includes("erwartet") && m.includes("ausgewaehlt ist aber")) return "WF_SEND_INPUT_TYPE_MISMATCH";
+  if (m.includes("template fehlt") || m.includes("template missing") || m.includes("missing api template")) return "WF_SEND_TEMPLATE_MISSING";
+  if (m.includes("unresolved placeholders")) return "WF_SEND_PLACEHOLDER_UNRESOLVED";
+  if (m.includes("no project loaded")) return "WF_PROJECT_NOT_LOADED";
+  if (m.includes("not reachable") || m.includes("econnrefused") || m.includes("fetch failed")) return "WF_COMFY_UNREACHABLE";
+  if (m.includes("blocked by local-only policy") || m.includes("comfyui_allow_remote")) return "WF_COMFY_REMOTE_BLOCKED";
+  if (m.includes("/prompt failed") || m.includes("http 4") || m.includes("http 5")) return "WF_COMFY_PROMPT_REJECTED";
+  if (m.includes("unsupported output") || m.includes("unsupported comfy output extension")) return "WF_OUTPUT_UNSUPPORTED_EXTENSION";
+  if (m.includes("already imported")) return "WF_OUTPUT_DUPLICATE";
+  if (m.includes("/view failed with http")) return "WF_OUTPUT_VIEW_HTTP_ERROR";
+  if (m.includes("missing comfy output path") || m.includes("invalid comfy output path")) return "WF_OUTPUT_IMPORT_FAILED";
+  if (m.includes("returned an empty file")) return "WF_OUTPUT_EMPTY_FILE";
+  if (m.includes("output import failed")) return "WF_OUTPUT_VIEW_FETCH_ERROR";
+  return fallbackCode;
+}
 
-  if (m.includes("no project loaded")) {
-    return "Projekt zuerst laden oder neu erstellen.";
+function resolveWorkflowIssue(rawMessage: string, fallbackCode: string): WorkflowIssue {
+  const raw = (rawMessage || "").trim();
+  const prefixed = raw.match(/^\[([A-Z0-9_:-]+)\]\s*(.*)$/);
+  const prefixCode = prefixed?.[1] ?? null;
+  let body = ((prefixed?.[2] ?? raw) || "Unknown workflow error.").trim();
+
+  let nextStepFromMessage: string | null = null;
+  const nextStepMatch = body.match(/(?:^|\s)Next step:\s*(.+)$/i);
+  if (nextStepMatch) {
+    nextStepFromMessage = nextStepMatch[1].trim();
+    body = body.replace(/(?:^|\s)Next step:\s*(.+)$/i, "").trim();
   }
 
-  if (m.includes("missing api template") || m.includes("workflow template missing")) {
-    return "API-Template-Datei pruefen: workflows/<workflowId>.api.json";
+  const code = prefixCode ?? detectWorkflowIssueCode(body, fallbackCode);
+  const nextStep = nextStepFromMessage ?? WORKFLOW_ISSUE_NEXT_STEP_BY_CODE[code] ?? "Fehlerdetails pruefen und den Schritt erneut ausfuehren.";
+
+  return {
+    code,
+    message: body || "Unknown workflow error.",
+    nextStep,
+  };
+}
+
+function resolveOutputImportIssue(rawMessage: string, outputPath: string): WorkflowIssue {
+  const raw = rawMessage.trim();
+  if (!raw) {
+    return resolveWorkflowIssue(`Output import produced no asset for "${outputPath}".`, "WF_OUTPUT_NO_RESULT");
+  }
+  return resolveWorkflowIssue(raw, "WF_OUTPUT_IMPORT_FAILED");
+}
+
+function compareRunsByNewest(
+  a: { id: string; createdAt: string; updatedAt: string },
+  b: { id: string; createdAt: string; updatedAt: string },
+): number {
+  const aUpdatedTs = Number.isFinite(new Date(a.updatedAt).getTime()) ? new Date(a.updatedAt).getTime() : 0;
+  const bUpdatedTs = Number.isFinite(new Date(b.updatedAt).getTime()) ? new Date(b.updatedAt).getTime() : 0;
+  if (bUpdatedTs !== aUpdatedTs) {
+    return bUpdatedTs - aUpdatedTs;
   }
 
-  if (m.includes("unresolved placeholders")) {
-    return "meta.inputs[].key und {{...}} Platzhalter im API-JSON abgleichen.";
+  const aCreatedTs = Number.isFinite(new Date(a.createdAt).getTime()) ? new Date(a.createdAt).getTime() : 0;
+  const bCreatedTs = Number.isFinite(new Date(b.createdAt).getTime()) ? new Date(b.createdAt).getTime() : 0;
+  if (bCreatedTs !== aCreatedTs) {
+    return bCreatedTs - aCreatedTs;
   }
 
-  if (m.includes("asset") && m.includes("not found")) {
-    return "Input-Asset in der Library neu waehlen oder erneut importieren.";
-  }
+  return b.id.localeCompare(a.id);
+}
 
-  if (m.includes("not reachable") || m.includes("econnrefused") || m.includes("fetch failed")) {
-    return "ComfyUI starten und URL/Port in deiner Umgebung pruefen.";
-  }
-
-  if (m.includes("blocked by local-only policy") || m.includes("comfyui_allow_remote")) {
-    return "Remote-Comfy ist geblockt. Optional COMFYUI_ALLOW_REMOTE=1 setzen.";
-  }
-
-  if (m.includes("http 4") || m.includes("http 5") || m.includes("/prompt failed")) {
-    return "ComfyUI-API hat den Prompt abgelehnt. Workflow/API-JSON gegen Comfy export neu pruefen.";
-  }
-
-  return undefined;
+function compareRunsByOldest(
+  a: { id: string; createdAt: string; updatedAt: string },
+  b: { id: string; createdAt: string; updatedAt: string },
+): number {
+  return -compareRunsByNewest(a, b);
 }
 
 function buildExpectedTemplateTokens(inputs: WorkflowMetaInputDefinition[]): string[] {
@@ -1471,41 +1800,50 @@ function mergeInputConnections(w: WorkflowCatalogEntry, current?: Record<string,
 }
 
 function validate(w: WorkflowCatalogEntry, d: Draft, assets: Asset[], inputConnections?: Record<string, boolean>): Validation {
-  const issues: string[] = [];
+  const issues: WorkflowIssue[] = [];
+  const addIssue = (code: string, message: string) => {
+    const issue = resolveWorkflowIssue(message, code);
+    issues.push(issue);
+  };
+
   const nums = parseNums(d.settings, issues);
   const requestInputs: Record<string, string> = {};
 
   w.inputs.forEach((i) => {
     if (!i.key.endsWith("AssetId")) {
-      issues.push(`Input-Key "${i.key}" endet nicht auf "AssetId" (Meta-Konvention verletzt).`);
+      addIssue("WF_SEND_INPUT_KEY_INVALID", `Input-Key "${i.key}" endet nicht auf "AssetId" (Meta-Konvention verletzt).`);
     }
 
     const connected = inputConnections?.[i.key] !== false;
     if (!connected) {
       if (i.required) {
-        issues.push(`Pflicht-Input "${i.label}" ist nicht verbunden.`);
+        addIssue("WF_SEND_INPUT_MISSING", `Pflicht-Input "${i.label}" ist nicht verbunden.`);
       }
       return;
     }
 
     const value = (d.inputs[i.key] ?? "").trim();
     if (!value) {
-      if (i.required) issues.push(`Pflicht-Input "${i.label}" ist leer.`);
+      if (i.required) {
+        addIssue("WF_SEND_INPUT_MISSING", `Pflicht-Input "${i.label}" ist leer.`);
+      }
       return;
     }
     const asset = assets.find((a) => a.id === value);
     if (!asset) {
-      issues.push(`Ausgewaehltes Asset fuer "${i.label}" existiert nicht mehr im Projekt.`);
+      addIssue("WF_SEND_INPUT_ASSET_MISSING", `Ausgewaehltes Asset fuer "${i.label}" existiert nicht mehr im Projekt.`);
       return;
     }
     if (asset.type !== i.type) {
-      issues.push(`Input "${i.label}" erwartet ${i.type}, ausgewaehlt ist aber ${asset.type}.`);
+      addIssue("WF_SEND_INPUT_TYPE_MISMATCH", `Input "${i.label}" erwartet ${i.type}, ausgewaehlt ist aber ${asset.type}.`);
       return;
     }
     requestInputs[i.key] = asset.id;
   });
 
-  if (!w.templateExists) issues.push(`API-Template fehlt: ${w.templateRelativePath}`);
+  if (!w.templateExists) {
+    addIssue("WF_SEND_TEMPLATE_MISSING", `API-Template fehlt: ${w.templateRelativePath}`);
+  }
   if (!nums) return { canSend: false, request: null, issues };
 
   const request: GenericComfyWorkflowRunRequest = {
@@ -1524,12 +1862,12 @@ function validate(w: WorkflowCatalogEntry, d: Draft, assets: Asset[], inputConne
   return { canSend: issues.length === 0, request: issues.length === 0 ? request : null, issues };
 }
 
-function parseNums(s: Record<NumKey, string>, issues: string[]): Record<NumKey, number> | null {
+function parseNums(s: Record<NumKey, string>, issues: WorkflowIssue[]): Record<NumKey, number> | null {
   const out = {} as Record<NumKey, number>;
   for (const f of NUM_FIELDS) {
     const n = Number((s[f.key] ?? "").trim());
     if (!Number.isFinite(n) || n < 1) {
-      issues.push(`${f.label} must be a number >= 1.`);
+      issues.push(resolveWorkflowIssue(`${f.label} must be a number >= 1.`, "WF_SEND_PARAM_INVALID"));
       return null;
     }
     out[f.key] = Math.round(n);
@@ -1589,8 +1927,13 @@ function canImportOutputPath(outputPath: string): boolean {
 }
 
 function formatImportReasonLabel(reason: string): string {
-  if (reason === "UNSUPPORTED_EXTENSION") return "Dateityp nicht unterstuetzt";
-  if (reason === "NO_CHANGE_OR_REJECTED") return "Nicht importiert (kein Aenderungseffekt/abgelehnt)";
-  if (reason === "IMPORT_EXCEPTION") return "Import-Fehler";
+  if (reason === "WF_OUTPUT_UNSUPPORTED_EXTENSION") return "Dateityp nicht unterstuetzt";
+  if (reason === "DUPLICATE_OUTPUT") return "Bereits importiert";
+  if (reason === "WF_OUTPUT_VIEW_HTTP_ERROR") return "Comfy /view HTTP-Fehler";
+  if (reason === "WF_OUTPUT_VIEW_FETCH_ERROR") return "Comfy /view Netzwerkfehler";
+  if (reason === "WF_OUTPUT_EMPTY_FILE") return "Leere Output-Datei";
+  if (reason === "WF_OUTPUT_IMPORT_FAILED") return "Import fehlgeschlagen";
+  if (reason === "WF_OUTPUT_IMPORT_EXCEPTION") return "Import Exception";
+  if (reason === "WF_OUTPUT_NO_RESULT") return "Kein neues Asset erzeugt";
   return reason;
 }

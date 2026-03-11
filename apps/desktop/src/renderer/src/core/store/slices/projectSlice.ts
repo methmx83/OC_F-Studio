@@ -42,6 +42,10 @@ type ProjectSliceKeys =
   | 'restoreProjectAutosave'
   | 'saveProject';
 
+function isInformationalRestoreMessage(message: string): boolean {
+  return message.trim().toLowerCase() === 'no previous session found.';
+}
+
 export function createProjectSlice(
   set: StoreSet<StudioState>,
   get: StoreGet<StudioState>,
@@ -106,8 +110,13 @@ export function createProjectSlice(
         const ipc = getIpcClient();
         const response = await ipc.restoreLastSession();
         if (!response.success || !response.project) {
-          set({ isProjectBusy: false, projectMessage: response.message });
-          return;
+          const shouldShowError = !isInformationalRestoreMessage(response.message);
+          set({
+            isProjectBusy: false,
+            projectMessage: response.message,
+            lastError: shouldShowError ? response.message : null,
+          });
+          return false;
         }
 
         const projectRoot = await ipc.getProjectRoot();
@@ -115,8 +124,10 @@ export function createProjectSlice(
         set({ ...nextState, isProjectBusy: false, lastError: null });
         await deps.hydrateAssetThumbnails(response.project.assets, set, get);
         void deps.hydrateKnownVideoProxies(response.project.assets, set, get);
+        return true;
       } catch (error) {
         set({ isProjectBusy: false, lastError: deps.toErrorMessage(error), projectMessage: 'Session restore failed' });
+        return false;
       }
     },
 

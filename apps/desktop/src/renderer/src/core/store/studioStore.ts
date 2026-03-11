@@ -65,7 +65,7 @@ export interface QueuedWorkflowRun {
   progress: number | null;
   message: string;
   outputPaths: string[];
-  request: ComfyWorkflowRunRequest;
+  request: ComfyWorkflowRunRequest | null;
 }
 
 export interface SelectedClip {
@@ -122,7 +122,7 @@ export interface StudioState {
   ensureVideoProxy: (assetId: string) => Promise<void>;
   newProject: () => Promise<void>;
   loadProject: () => Promise<void>;
-  restoreLastSession: () => Promise<void>;
+  restoreLastSession: () => Promise<boolean>;
   listProjectAutosaves: () => Promise<ProjectAutosaveListResponse>;
   restoreProjectAutosave: (fileName: string) => Promise<boolean>;
   saveProject: (reason?: SaveProjectReason) => Promise<void>;

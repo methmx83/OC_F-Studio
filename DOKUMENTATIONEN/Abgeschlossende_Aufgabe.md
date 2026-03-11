@@ -6,6 +6,131 @@ Refactor-/Modularisierungsarbeiten werden ab jetzt getrennt in `DOKUMENTATIONEN/
 
 Diese Datei bleibt fuer abgeschlossene Features, Hotfixes und funktionale Erweiterungen.
 
+## Aufgabe 39 - P0.2 Workflow Studio Produktionssicherheit abgeschlossen
+
+Der Workflow-Studio-Pfad wurde auf Beta-Niveau gehaertet: Send-Preflight + robuste Fehlercodes mit Next-Step, stabile Recent-Runs-Verarbeitung (inkl. Race-Guards/Persistenz) und robuster Output-Import mit Duplicate-/Teilfehler-Handling.
+
+Umgesetzt:
+- Datei: `apps/desktop/src/renderer/src/features/workflows/WorkflowStudioView.tsx`
+  - einheitliches Fehlerobjekt `WorkflowIssue` mit:
+    - `code`
+    - `message`
+    - `nextStep`
+  - `Send to ComfyUI` gehaertet:
+    - keine stillen Abbrueche bei Validation-Blockern
+    - verpflichtender Payload-Preflight (`previewComfyRunPayload`) vor Queue
+    - Fehlercodes + Next-Step in Status-UI sichtbar
+  - Validation auf strukturierte Issues umgestellt (fehlende Inputs, Typ-Mismatch, Meta-Key-Konvention, Parameter, Template fehlt).
+  - Recent-Runs gehaertet:
+    - dedupe nach `runId`
+    - deterministische Sortierung (`updatedAt`, `createdAt`, `id`)
+    - Filter-Persistenz in `sessionStorage` (`workflowStudio.recentRuns.filter`)
+  - Retry/Copy robust bei Runs ohne gespeichertes Request-Payload (kein stiller Fail, klare Meldung).
+  - Output-Import gehaertet:
+    - Duplicate-Guard im UI-Flow (auto+manuell importierte Outputs)
+    - Teilfehler-Summary mit Reason-Codes
+    - Einzelimport zeigt bei Fehlschlag Code + Next-Step
+    - Import-Buttons bei bereits importierten Outputs deaktiviert
+- Datei: `apps/desktop/src/renderer/src/core/store/utils/workflowStoreUtils.ts`
+  - `applyComfyRunEventState(...)` jetzt robust:
+    - Upsert neuer Run-Events statt Drop bei unbekanntem `runId`
+    - Out-of-order Event-Schutz (aeltere Events ueberschreiben nicht neuere)
+    - stabile Sortierung + Begrenzung auf 80 Runs
+    - `workflowId: "unknown"` bei Cancel laesst bestehenden Workflow-Kontext erhalten
+  - Platzhalter-Runs bekommen `request: null` statt impliziter Fake-Requests.
+- Datei: `apps/desktop/src/renderer/src/core/store/studioStore.ts`
+  - `QueuedWorkflowRun.request` auf `ComfyWorkflowRunRequest | null` erweitert (expliziter Zustand statt stiller Annahmen).
+- Datei: `apps/desktop/src/renderer/src/core/store/slices/comfySlice.ts`
+  - Persistenz fuer Recent Runs + auto-importierte Output-Maps in `localStorage`.
+  - Persistenz wird bei Run-Events/Auto-Import-Aktualisierungen fortgeschrieben.
+- Datei: `apps/desktop/src/main/services/comfyService.ts`
+  - Fehlerausgaben fuer Queue/Preview/Cancel vereinheitlicht:
+    - formatierter Error-String mit `[CODE] ... Next step: ...`
+    - Klassifikation fuer Template/Placeholder/Asset/Prompt/Netzwerk/Policy
+  - Polling-Timeout liefert jetzt ebenfalls codierte Next-Step-Fehlermeldung.
+- Datei: `apps/desktop/src/main/index.ts`
+  - Output-Import gehaertet:
+    - persistenter Duplicate-Guard via Asset-Tag `comfy-output:<normalizedPath>`
+    - klarere Next-Step-Fehlertexte fuer unsupported extension, `/view` HTTP-Fehler, leere Datei, Netzwerk-/Importfehler
+    - importierte Comfy-Assets werden mit Herkunftstags/Note markiert.
+
+Wirkung:
+- Kein stilles Scheitern mehr in Send/Retry/Cancel/Import-Pfaden.
+- Fehler sind einheitlich codiert und im UI mit naechster Aktion sichtbar.
+- Recent Runs bleiben bei Event-Rennen stabil und reproduzierbar.
+- Output-Import behandelt Duplikate und Teilfehler transparent.
+
+Verifiziert:
+- `npm run lint`
+  - erster Lauf: FAIL (1x `no-unused-vars` in `WorkflowStudioView.tsx`)
+  - nach Fix: OK
+- `npm run typecheck`
+  - erster Lauf: FAIL (`??` + `||` ohne Klammern)
+  - nach Fix: OK
+- `npm run build` -> OK
+- `npm run validate:workflows` -> OK
+- `npm run validate:preset-storage --workspace @ai-filmstudio/desktop` -> OK
+- Workflow-Studio-nahe Smoke-Checks:
+  - Catalog-Basis: `npm run validate:workflows` -> `Workflow-Meta-Validierung: OK`
+  - Send + Run-States Service-Smoke (via `npx tsx`, fehlendes Template):
+    - `SMOKE_QUEUE_SUCCESS false`
+    - `SMOKE_QUEUE_MESSAGE [WF_SEND_TEMPLATE_MISSING] ... Next step: ...`
+    - `SMOKE_EVENTS_COUNT 2`
+    - `SMOKE_LAST_EVENT_STATUS failed`
+    - `SMOKE_PREVIEW_SUCCESS false`
+    - `SMOKE_PREVIEW_MESSAGE [WF_SEND_TEMPLATE_MISSING] ... Next step: ...`
+  - Recent-Runs-Race-Smoke (via `npx tsx` auf `applyComfyRunEventState`):
+    - `SMOKE_RUN_STALE_KEEP_LAST_ERROR true`
+    - `SMOKE_RUN_UPSERT_COUNT 2`
+    - `SMOKE_RUN_UPSERT_FIRST_ID run_new`
+  - Dev-Boot-Smoke:
+    - `WF_DEV_SMOKE:RUNNING`
+    - `WF_DEV_SMOKE:STOPPED`
+
+## Aufgabe 38 - P0.1 Hardening: Persistenz + Recovery finalisiert
+
+Der Restore-/Autosave-Pfad wurde fuer Beta-Stabilitaet gehaertet: Fehlerfaelle sind jetzt spezifisch (Datei fehlt/JSON defekt/IO/Validation), enthalten immer einen naechsten Handlungsschritt und der Store wird nach Restore konsistent zurueckgesetzt.
+
+Umgesetzt:
+- Datei: `apps/desktop/src/main/index.ts`
+  - Restore-Fehlerklassifikation erweitert:
+    - Datei fehlt (`ENOENT`)
+    - Permission/IO (`EACCES`/`EPERM` + generische Read-Fehler)
+    - Defekte JSON-Datei (`SyntaxError`)
+    - Ungueltige Projektstruktur (Schema-Validierung)
+  - Last-Session- und Autosave-Restore liefern jetzt klare Meldungen mit `Next step: ...`.
+- Datei: `apps/desktop/src/renderer/src/core/store/utils/workflowStoreUtils.ts`
+  - `toProjectState(...)` setzt bei Restore jetzt zusaetzlich:
+    - `trackAudioMutedById: {}`
+    - `trackAudioSoloById: {}`
+  - verhindert inkonsistente Audio-Mix-Reste zwischen Snapshot/Session-Wechseln.
+- Datei: `apps/desktop/src/renderer/src/core/store/slices/projectSlice.ts`
+  - `restoreLastSession()` liefert `Promise<boolean>`.
+  - Nicht-informative Restore-Fehler werden jetzt als `lastError` sichtbar gemacht (kein stiller Fehlerpfad).
+- Datei: `apps/desktop/src/renderer/src/core/store/studioStore.ts`
+  - Store-Signatur angepasst: `restoreLastSession: () => Promise<boolean>`.
+- Datei: `apps/desktop/src/renderer/src/ui/layout/AppShell.tsx`
+  - `SettingsView` um `Recovery`-Bereich erweitert:
+    - `Restore Last Session`
+    - `Restore Autosave`
+  - Autosave-Dialog zeigt Restore-Fehler jetzt zusaetzlich inline (mit Next-Step-Text).
+  - Error-Banner zeigt Meldungen nicht mehr als harte Einzeilen-Trunkierung.
+
+Wirkung:
+- Keine stillen Restore-Fehler mehr in den Kernfaellen.
+- User bekommt pro Fehlerfall eine konkrete naechste Aktion.
+- Restore setzt Timeline/Assets/Workflow/Audio-Mix-Zustand konsistent zurueck.
+
+Verifiziert:
+- `npm run lint` -> OK
+- `npm run typecheck` -> OK (nach einem Fix fuer `props.isProjectBusy`)
+- `npm run build` -> OK
+- `npm run validate:workflows` -> OK
+- Smoke (relevant zum geaenderten Bereich):
+  - `npm run validate:preset-storage --workspace @ai-filmstudio/desktop` -> OK
+  - Dev-Boot-Smoketest (Headless-Prozesslauf) -> `DEV_SMOKE:RUNNING`, danach kontrolliert `DEV_SMOKE:STOPPED`
+  - Hinweis: Voll interaktive UI-Klickstrecken aus `scripts/smoke.md` bleiben in der CLI-Umgebung manuell.
+
 ## Aufgabe 37 - Preset Conflict Hardening (Workflow-Studio)
 
 Der Preset-Konflikt-Flow wurde technisch und in der UX gehaertet, um bei extern/parallelen Dateiaenderungen deterministisch und ohne haengende UI-Zustaende zu reagieren.

@@ -100,6 +100,35 @@ function appendWarning(message: string, warningMessage: string | null): string {
   return `${message} ${warningMessage}`;
 }
 
+function formatWorkflowServiceError(code: string, message: string, nextStep: string): string {
+  return `[${code}] ${message} Next step: ${nextStep}`;
+}
+
+function classifyWorkflowServiceError(errorMessage: string, fallbackCode: string): { code: string; nextStep: string } {
+  const m = errorMessage.toLowerCase();
+
+  if (m.includes('workflow template missing') || m.includes('missing api template')) {
+    return { code: 'WF_SEND_TEMPLATE_MISSING', nextStep: 'API-Template-Datei unter workflows/<workflowId>.api.json pruefen.' };
+  }
+  if (m.includes('unresolved placeholders')) {
+    return { code: 'WF_SEND_PLACEHOLDER_UNRESOLVED', nextStep: 'meta.inputs[].key und {{...}} Platzhalter im Template abgleichen.' };
+  }
+  if (m.includes('was not found in project assets')) {
+    return { code: 'WF_SEND_INPUT_ASSET_MISSING', nextStep: 'Input-Asset im Projekt erneut zuweisen oder neu importieren.' };
+  }
+  if (m.includes('/prompt failed')) {
+    return { code: 'WF_COMFY_PROMPT_REJECTED', nextStep: 'Comfy Prompt-JSON gegen aktuellen API-Export pruefen.' };
+  }
+  if (m.includes('fetch failed') || m.includes('econnrefused') || m.includes('not reachable')) {
+    return { code: 'WF_COMFY_UNREACHABLE', nextStep: 'ComfyUI starten und URL/Port pruefen.' };
+  }
+  if (m.includes('blocked by local-only policy') || m.includes('allow_remote')) {
+    return { code: 'WF_COMFY_REMOTE_BLOCKED', nextStep: 'Lokalen Host nutzen oder COMFYUI_ALLOW_REMOTE=1 setzen.' };
+  }
+
+  return { code: fallbackCode, nextStep: 'Fehlerdetails pruefen und Workflow erneut starten.' };
+}
+
 export function resolveComfyBaseUrlPolicy(baseUrlOverride?: string): ComfyBaseUrlPolicyResult {
   const overrideUrl = baseUrlOverride?.trim();
   const configuredUrl = process.env.COMFYUI_BASE_URL?.trim();
@@ -611,7 +640,11 @@ async function monitorComfyRun(params: {
     promptId,
     workflowId,
     status: 'failed',
-    message: 'ComfyUI polling timed out before completion.',
+    message: formatWorkflowServiceError(
+      'WF_RUN_POLL_TIMEOUT',
+      'ComfyUI polling timed out before completion.',
+      'Run in ComfyUI pruefen und bei Bedarf erneut starten.',
+    ),
     progress: null,
     outputPaths: [],
   });
@@ -677,18 +710,26 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
     async queueComfyRun(payload: QueueComfyRunRequest): Promise<QueueComfyRunResponse> {
       const runId = payload.runId?.trim();
       if (!runId) {
-        return { success: false, message: 'Missing runId.', runId: payload.runId };
+        return {
+          success: false,
+          message: formatWorkflowServiceError('WF_SEND_MISSING_RUN_ID', 'Missing runId.', 'Client-Run-ID erzeugen und Request erneut senden.'),
+          runId: payload.runId,
+        };
       }
 
       if (isDisposed) {
-        return { success: false, message: 'Comfy service is shutting down.', runId };
+        return {
+          success: false,
+          message: formatWorkflowServiceError('WF_SEND_SERVICE_DISPOSING', 'Comfy service is shutting down.', 'App neu starten und Run erneut senden.'),
+          runId,
+        };
       }
 
       const projectRoot = options.getCurrentProjectRoot();
       if (!projectRoot) {
         return {
           success: false,
-          message: 'No project loaded. Create or load a project first.',
+          message: formatWorkflowServiceError('WF_PROJECT_NOT_LOADED', 'No project loaded. Create or load a project first.', 'Projekt laden oder neu erstellen und Send erneut ausfuehren.'),
           runId,
         };
       }
@@ -696,7 +737,11 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
       const workflowRequest = payload.request;
       const baseUrlResolution = resolveComfyBaseUrlPolicy(payload.baseUrlOverride);
       if (!baseUrlResolution.ok) {
-        const message = `Failed to queue workflow: ${baseUrlResolution.message}`;
+        const message = formatWorkflowServiceError(
+          'WF_SEND_BASEURL_INVALID',
+          `Failed to queue workflow: ${baseUrlResolution.message}`,
+          'Comfy URL/Preset pruefen und erneut senden.',
+        );
         options.emitRunEvent({
           runId,
           workflowId: workflowRequest.workflowId,
@@ -784,7 +829,9 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
           promptId: submitResult.promptId,
         };
       } catch (error) {
-        const message = `Failed to queue workflow: ${(error as Error).message}`;
+        const rawMessage = `Failed to queue workflow: ${(error as Error).message}`;
+        const classified = classifyWorkflowServiceError(rawMessage, 'WF_SEND_QUEUE_FAILED');
+        const message = formatWorkflowServiceError(classified.code, rawMessage, classified.nextStep);
         options.emitRunEvent({
           runId,
           workflowId: workflowRequest.workflowId,
@@ -804,12 +851,18 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
     async previewComfyRunPayload(payload: PreviewComfyRunPayloadRequest): Promise<PreviewComfyRunPayloadResponse> {
       const projectRoot = options.getCurrentProjectRoot();
       if (!projectRoot) {
-        return { success: false, message: 'No project loaded. Create or load a project first.' };
+        return {
+          success: false,
+          message: formatWorkflowServiceError('WF_PROJECT_NOT_LOADED', 'No project loaded. Create or load a project first.', 'Projekt laden oder neu erstellen und erneut versuchen.'),
+        };
       }
 
       const baseUrlResolution = resolveComfyBaseUrlPolicy(payload.baseUrlOverride);
       if (!baseUrlResolution.ok) {
-        return { success: false, message: baseUrlResolution.message };
+        return {
+          success: false,
+          message: formatWorkflowServiceError('WF_SEND_BASEURL_INVALID', baseUrlResolution.message, 'Comfy URL korrigieren und Preview erneut ausfuehren.'),
+        };
       }
 
       try {
@@ -828,7 +881,14 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
         collectMissingTemplateTokens(renderedTemplate, variables, missingTokens);
         if (missingTokens.size > 0) {
           const missingJoined = Array.from(missingTokens).sort().join(', ');
-          return { success: false, message: `Workflow template contains unresolved placeholders: ${missingJoined}` };
+          return {
+            success: false,
+            message: formatWorkflowServiceError(
+              'WF_SEND_PLACEHOLDER_UNRESOLVED',
+              `Workflow template contains unresolved placeholders: ${missingJoined}`,
+              'Template-Token und Input-Keys abgleichen.',
+            ),
+          };
         }
 
         return {
@@ -838,21 +898,34 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
           renderedPrompt: renderedTemplate as Record<string, unknown>,
         };
       } catch (error) {
-        return { success: false, message: `Failed to render workflow payload: ${(error as Error).message}` };
+        const rawMessage = `Failed to render workflow payload: ${(error as Error).message}`;
+        const classified = classifyWorkflowServiceError(rawMessage, 'WF_SEND_PAYLOAD_PREVIEW_FAILED');
+        return {
+          success: false,
+          message: formatWorkflowServiceError(classified.code, rawMessage, classified.nextStep),
+        };
       }
     },
 
     async cancelComfyRun(payload: CancelComfyRunRequest): Promise<CancelComfyRunResponse> {
       const runId = payload.runId?.trim();
       if (!runId) {
-        return { success: false, message: 'Missing runId.', runId: payload.runId };
+        return {
+          success: false,
+          message: formatWorkflowServiceError('WF_RUN_CANCEL_MISSING_ID', 'Missing runId.', 'Run-ID uebergeben und Cancel erneut ausfuehren.'),
+          runId: payload.runId,
+        };
       }
 
       stopPollingRun(runId);
 
       const baseUrlResolution = resolveComfyBaseUrlPolicy(payload.baseUrlOverride);
       if (!baseUrlResolution.ok) {
-        const message = `Failed to cancel workflow: ${baseUrlResolution.message}`;
+        const message = formatWorkflowServiceError(
+          'WF_RUN_CANCEL_BASEURL_INVALID',
+          `Failed to cancel workflow: ${baseUrlResolution.message}`,
+          'Comfy URL korrigieren und Cancel erneut ausfuehren.',
+        );
         options.emitRunEvent({
           runId,
           workflowId: 'unknown',
@@ -868,7 +941,11 @@ export function createComfyService(options: CreateComfyServiceOptions): ComfySer
       try {
         await requestComfyInterrupt(baseUrlResolution.baseUrl);
       } catch (error) {
-        const message = `Comfy cancel request failed: ${(error as Error).message}`;
+        const message = formatWorkflowServiceError(
+          'WF_RUN_CANCEL_REQUEST_FAILED',
+          `Comfy cancel request failed: ${(error as Error).message}`,
+          'ComfyUI-Erreichbarkeit pruefen und Cancel erneut ausfuehren.',
+        );
         options.emitRunEvent({
           runId,
           workflowId: 'unknown',
